@@ -1,0 +1,7 @@
+[
+  {"productCategory":"Aluminium machining offcuts","avgPrice":48.5,"unit":"RM/kg","region":"Selangor","rangeMin":42,"rangeMax":55},
+  {"productCategory":"HDPE plastic pellets","avgPrice":3.2,"unit":"RM/kg","region":"Penang","rangeMin":2.6,"rangeMax":3.8},
+  {"productCategory":"Cardboard packaging","avgPrice":0.65,"unit":"RM/kg","region":"Johor","rangeMin":0.45,"rangeMax":0.85},
+  {"productCategory":"Copper wire scrap","avgPrice":25.0,"unit":"RM/kg","region":"Perak","rangeMin":21,"rangeMax":29},
+  {"productCategory":"Mild steel offcuts","avgPrice":1.85,"unit":"RM/kg","region":"Kuala Lumpur","rangeMin":1.4,"rangeMax":2.3}
+]

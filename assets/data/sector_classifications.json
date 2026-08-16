@@ -1,0 +1,8 @@
+[
+  {"code":"C10","name":"Food manufacturing","examples":["Processed food","Beverages","Ingredients"]},
+  {"code":"C20","name":"Chemical and plastics","examples":["Resins","Polymers","Industrial chemicals"]},
+  {"code":"C24","name":"Basic metals","examples":["Steel","Aluminium","Copper"]},
+  {"code":"C25","name":"Fabricated metal products","examples":["Machining","Fabrication","Tooling"]},
+  {"code":"C31","name":"Furniture and wood products","examples":["Furniture","Timber","Packaging"]},
+  {"code":"E38","name":"Waste collection and recovery","examples":["Recycling","Material recovery","Waste logistics"]}
+]
