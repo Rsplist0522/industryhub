@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import '../../../app/theme.dart';
 import '../../../core/app_state.dart';
 import '../../../core/widgets.dart';
@@ -36,7 +37,20 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     final state = ref.watch(appStateProvider);
     final ownListings = state.listings.where((item) => item.owner == state.profile.businessName).toList();
     return Scaffold(
-      appBar: AppBar(title: const Text('My Profile')),
+      appBar: AppBar(
+      leading: IconButton(
+        icon: const Icon(Icons.arrow_back),
+        tooltip: 'Go back',
+        onPressed: () {
+          if (context.canPop()) {
+            context.pop();
+          } else {
+            context.go('/home');
+          }
+        },
+      ),
+      title: const Text('My Profile'),
+      ),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(20, 20, 20, 30),
         children: [

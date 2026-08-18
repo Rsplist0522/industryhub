@@ -38,7 +38,7 @@ class HomeScreen extends ConsumerWidget {
             title: 'Skill Advisor',
             description: 'Turn a hiring or upskilling need into a ranked shortlist of local programmes.',
             icon: Icons.psychology_outlined,
-            onTap: () => context.go('/skill-match'),
+            onTap: () => context.push('/skill-match'),
           ),
           const SizedBox(height: 12),
           ModuleCard(
@@ -47,7 +47,7 @@ class HomeScreen extends ConsumerWidget {
             description: 'Pressure-test a proposed price with a transparent, benchmark-led negotiation.',
             icon: Icons.compare_arrows,
             accent: AppColors.amber,
-            onTap: () => context.go('/fair-price'),
+            onTap: () => context.push('/fair-price'),
           ),
           const SizedBox(height: 12),
           ModuleCard(
@@ -56,7 +56,7 @@ class HomeScreen extends ConsumerWidget {
             description: 'Keep your business profile verified and manage the materials you can supply or need.',
             icon: Icons.badge_outlined,
             accent: AppColors.green,
-            onTap: () => context.go('/resource-profile'),
+            onTap: () => context.push('/resource-profile'),
           ),
           const SizedBox(height: 12),
           ModuleCard(
@@ -65,7 +65,7 @@ class HomeScreen extends ConsumerWidget {
             description: 'Browse nearby industrial materials and move from discovery to a deal request.',
             icon: Icons.storefront_outlined,
             accent: AppColors.rust,
-            onTap: () => context.go('/marketplace'),
+            onTap: () => context.push('/marketplace'),
           ),
           const SizedBox(height: 24),
           Card(
