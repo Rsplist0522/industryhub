@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../../app/theme.dart';
 import '../../../core/app_state.dart';
 import '../../../core/widgets.dart';
+import '../data/deal_request_repository.dart';
 
 class MarketplaceScreen extends ConsumerStatefulWidget {
   const MarketplaceScreen({super.key, this.onHome});
@@ -14,9 +15,28 @@ class MarketplaceScreen extends ConsumerStatefulWidget {
   ConsumerState<MarketplaceScreen> createState() => _MarketplaceScreenState();
 }
 
+class _SavedMarketplaceSearch {
+  const _SavedMarketplaceSearch({
+    required this.query,
+    required this.type,
+    required this.material,
+    required this.location,
+    required this.verifiedOnly,
+    required this.minimumQuantity,
+  });
+
+  final String query;
+  final String type;
+  final String? material;
+  final String? location;
+  final bool verifiedOnly;
+  final double minimumQuantity;
+}
+
 class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
   final _search = TextEditingController();
-  final _transactions = <_DealRequest>[];
+  final _dealRequestRepository = DealRequestRepository();
+  final _transactions = <DealRequestRecord>[];
   final _requestedListingKeys = <String>{};
 
   String _filter = 'all';
@@ -25,11 +45,51 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
   String? _location;
   bool _verifiedOnly = false;
   double _minimumQuantity = 0;
+  _SavedMarketplaceSearch? _savedSearch;
+  bool _isLoadingHistory = true;
+  bool _isSendingRequest = false;
+  String? _historyError;
+
+  @override
+  void initState() {
+    super.initState();
+    Future<void>.microtask(_loadOutgoingRequests);
+  }
 
   @override
   void dispose() {
     _search.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadOutgoingRequests() async {
+    if (mounted) {
+      setState(() {
+        _isLoadingHistory = true;
+        _historyError = null;
+      });
+    }
+    try {
+      final requests = await _dealRequestRepository.fetchOutgoingRequests();
+      if (!mounted) return;
+      setState(() {
+        _transactions
+          ..clear()
+          ..addAll(requests);
+        _requestedListingKeys
+          ..clear()
+          ..addAll(requests.map((request) => request.listingId));
+        _isLoadingHistory = false;
+        _historyError = null;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _isLoadingHistory = false;
+        _historyError = 'Firestore request history could not be loaded.';
+      });
+      debugPrint('Marketplace request history could not be loaded: $error');
+    }
   }
 
   @override
@@ -57,6 +117,7 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
             onSelected: (value) => setState(() => _sort = value),
             itemBuilder: (context) => const [
               PopupMenuItem(value: 'default', child: Text('Default order')),
+              PopupMenuItem(value: 'relevance', child: Text('Best match first')),
               PopupMenuItem(value: 'quantity', child: Text('Highest quantity')),
               PopupMenuItem(value: 'location', child: Text('Location A–Z')),
             ],
@@ -133,6 +194,12 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
                   icon: const Icon(Icons.tune_outlined, size: 17),
                   label: const Text('More filters'),
                 ),
+                const SizedBox(width: 8),
+                OutlinedButton.icon(
+                  onPressed: _saveCurrentSearch,
+                  icon: const Icon(Icons.bookmark_add_outlined, size: 17),
+                  label: const Text('Save search'),
+                ),
               ],
             ),
           ),
@@ -157,6 +224,10 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
                 ),
               ],
             ),
+          ],
+          if (_savedSearch != null) ...[
+            const SizedBox(height: 10),
+            _SavedSearchBanner(onApply: _applySavedSearch, onClear: () => setState(() => _savedSearch = null)),
           ],
           const SizedBox(height: 22),
           Row(
@@ -189,6 +260,8 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
               (listing) => _MarketplaceCard(
                 listing: listing,
                 requested: _requestedListingKeys.contains(_listingKey(listing)),
+                matchScore: _matchScore(listing),
+                matchLabel: _matchLabel(listing),
                 onTap: () => _showDetail(listing),
               ),
             ),
@@ -221,6 +294,9 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
     }).toList();
 
     switch (_sort) {
+      case 'relevance':
+        filtered.sort((a, b) => _matchScore(b).compareTo(_matchScore(a)));
+        break;
       case 'quantity':
         filtered.sort((a, b) => b.quantity.compareTo(a.quantity));
         break;
@@ -231,6 +307,28 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
         break;
     }
     return filtered;
+  }
+
+  int _matchScore(Listing listing) {
+    final query = _search.text.trim().toLowerCase();
+    var score = 45;
+    if (query.isNotEmpty && listing.material.toLowerCase().contains(query)) score += 25;
+    if (query.isNotEmpty && listing.location.toLowerCase().contains(query)) score += 10;
+    if (_material == listing.material) score += 8;
+    if (_location == listing.location) score += 6;
+    if (_filter != 'all' && listing.type == _filter) score += 4;
+    if (listing.verified) score += 7;
+    if (_minimumQuantity > 0 && listing.quantity >= _minimumQuantity) score += 3;
+    return score.clamp(45, 98).toInt();
+  }
+
+  String _matchLabel(Listing listing) {
+    final query = _search.text.trim().toLowerCase();
+    if (query.isNotEmpty && listing.material.toLowerCase().contains(query)) return 'Material search match';
+    if (_material == listing.material) return 'Material filter match';
+    if (_location == listing.location) return 'Location filter match';
+    if (listing.verified) return 'Verified ReSource business';
+    return 'Prototype marketplace match';
   }
 
   void _goHome() {
@@ -248,12 +346,16 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
 
     await showModalBottomSheet<void>(
       context: context,
+      isScrollControlled: true,
       showDragHandle: true,
       backgroundColor: AppColors.chalk,
       builder: (sheetContext) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
-          child: Column(
+        top: false,
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(sheetContext).height * 0.82),
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+            child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -269,6 +371,11 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
               _DetailLine(label: 'Location', value: listing.location),
               _DetailLine(label: 'Description', value: listing.description),
               if (listing.verified) const _DetailLine(label: 'Trust status', value: 'Verified ReSource business'),
+              _DetailLine(label: 'Local match signal', value: '${_matchScore(listing)}% · ${_matchLabel(listing)}'),
+              const Padding(
+                padding: EdgeInsets.only(bottom: 12),
+                child: Text('Prototype match signal only — confirm material grade, unit and collection terms directly with the business.', style: TextStyle(color: AppColors.slate, fontSize: 12, height: 1.35)),
+              ),
               const SizedBox(height: 16),
               if (requested)
                 const _RequestStatus()
@@ -276,12 +383,16 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
                 SizedBox(
                   width: double.infinity,
                   child: FilledButton.icon(
-                    onPressed: () {
+                    onPressed: _isSendingRequest
+                        ? null
+                        : () async {
                       Navigator.pop(sheetContext);
-                      _showDealRequestDialog(listing);
+                      await Future<void>.delayed(const Duration(milliseconds: 300));
+                      if (!mounted) return;
+                      await _showDealRequestDialog(listing);
                     },
                     icon: const Icon(Icons.handshake_outlined),
-                    label: const Text('Send deal request'),
+                    label: Text(_isSendingRequest ? 'Saving request…' : 'Send deal request'),
                   ),
                 ),
               const SizedBox(height: 8),
@@ -300,12 +411,13 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
           ),
         ),
       ),
+      ),
     );
   }
 
   Future<void> _showDealRequestDialog(Listing listing) async {
     final note = TextEditingController();
-    final submitted = await showDialog<bool>(
+    final submittedNote = await showDialog<String?>(
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: const Text('Send a deal request?'),
@@ -326,43 +438,54 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
                 alignLabelWithHint: true,
               ),
             ),
+            const SizedBox(height: 6),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(color: AppColors.chalk, borderRadius: BorderRadius.circular(8)),
+              child: Text(
+                'Request summary: ${listing.quantity.toStringAsFixed(0)} ${listing.unit} of ${listing.material} from ${listing.owner}. A sent request is not a completed deal; both businesses must agree separately.',
+                style: const TextStyle(color: AppColors.slate, fontSize: 12, height: 1.35),
+              ),
+            ),
           ],
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Cancel')),
-          FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('Send request')),
+          TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(dialogContext, note.text.trim()), child: const Text('Send request')),
         ],
       ),
     );
 
-    if (!mounted) {
-      note.dispose();
-      return;
-    }
+    // Keep the controller alive until the modal route has fully closed.
+    await Future<void>.delayed(const Duration(milliseconds: 300));
+    note.dispose();
+    if (submittedNote == null || !mounted) return;
 
-    if (submitted == true) {
+    setState(() => _isSendingRequest = true);
+    try {
+      final request = await _dealRequestRepository.sendRequest(listing: listing, note: submittedNote);
+      if (!mounted) return;
       setState(() {
         _requestedListingKeys.add(_listingKey(listing));
-        _transactions.insert(
-          0,
-          _DealRequest(
-            material: listing.material,
-            owner: listing.owner,
-            location: listing.location,
-            quantity: '${listing.quantity.toStringAsFixed(0)} ${listing.unit}',
-            note: note.text.trim(),
-            sentAt: DateTime.now(),
-          ),
-        );
+        _transactions.insert(0, request);
+        _isSendingRequest = false;
       });
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Deal request sent to ${listing.owner}.'),
+          content: Text('Deal request sent to ${listing.owner}. Await their direct response.'),
           action: SnackBarAction(label: 'History', onPressed: _showHistory),
         ),
       );
+    } on StateError catch (error) {
+      if (!mounted) return;
+      setState(() => _isSendingRequest = false);
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.message.toString())));
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _isSendingRequest = false);
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('The deal request could not be saved. Please check your connection and try again.')));
     }
-    note.dispose();
   }
 
   Future<void> _showFilters(List<Listing> sourceListings) async {
@@ -475,36 +598,85 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
   }
 
   Future<void> _showHistory() async {
+    await _loadOutgoingRequests();
+    if (!mounted) return;
     await showModalBottomSheet<void>(
       context: context,
+      isScrollControlled: true,
       showDragHandle: true,
       backgroundColor: AppColors.chalk,
       builder: (sheetContext) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
-          child: Column(
+        top: false,
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(sheetContext).height * 0.78),
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+            child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text('Transaction history', style: Theme.of(sheetContext).textTheme.titleLarge),
               const SizedBox(height: 4),
-              const Text('Deal requests sent during this session.', style: TextStyle(color: AppColors.slate)),
+              const Text('Outgoing deal requests saved to your Firestore account.', style: TextStyle(color: AppColors.slate)),
               const SizedBox(height: 14),
-              if (_transactions.isEmpty)
+              if (_isLoadingHistory)
+                const Center(child: Padding(padding: EdgeInsets.all(20), child: CircularProgressIndicator()))
+              else if (_historyError != null)
+                _MarketplaceEmptyState(
+                  icon: Icons.cloud_off_outlined,
+                  title: 'Request history is unavailable.',
+                  description: _historyError!,
+                  actionLabel: 'Try again',
+                  onAction: () {
+                    Navigator.pop(sheetContext);
+                    _showHistory();
+                  },
+                )
+              else if (_transactions.isEmpty)
                 const _MarketplaceEmptyState(
                   icon: Icons.receipt_long_outlined,
                   title: 'No deal requests yet.',
-                  description: 'Open a listing and send a request to start your transaction history.',
+                  description: 'Open a listing and send a request to create a persistent outgoing request.',
                 )
               else
                 ..._transactions.map(
-                  (request) => ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    leading: const CircleAvatar(child: Icon(Icons.handshake_outlined)),
-                    title: Text(request.material),
-                    subtitle: Text('${request.owner} · ${request.quantity}\n${request.location}${request.note.isEmpty ? '' : ' · ${request.note}'}'),
-                    trailing: Text(_formatTime(request.sentAt), style: const TextStyle(color: AppColors.slate, fontSize: 12)),
-                    isThreeLine: request.note.isNotEmpty,
+                  (request) => Card(
+                    margin: const EdgeInsets.only(bottom: 10),
+                    child: Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const CircleAvatar(child: Icon(Icons.handshake_outlined)),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Expanded(child: Text(request.material, style: Theme.of(sheetContext).textTheme.titleSmall)),
+                                    const SizedBox(width: 8),
+                                    StatusChip(label: request.status, color: AppColors.amber),
+                                  ],
+                                ),
+                                const SizedBox(height: 5),
+                                Text('${request.owner} · ${request.quantity}', style: const TextStyle(color: AppColors.slate)),
+                                Text(request.location, style: const TextStyle(color: AppColors.slate)),
+                                if (request.note.isNotEmpty) Text(request.note, style: const TextStyle(color: AppColors.slate, fontSize: 12)),
+                                const SizedBox(height: 5),
+                                Row(
+                                  children: [
+                                    const Expanded(child: Text('Awaiting a direct business response.', style: TextStyle(color: AppColors.slate, fontSize: 12))),
+                                    Text(_formatTime(request.sentAt), style: const TextStyle(color: AppColors.slate, fontSize: 12)),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
                 ),
               const SizedBox(height: 10),
@@ -523,6 +695,7 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
           ),
         ),
       ),
+      ),
     );
   }
 
@@ -533,6 +706,41 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
       _verifiedOnly = false;
       _minimumQuantity = 0;
     });
+  }
+
+  void _saveCurrentSearch() {
+    final query = _search.text.trim();
+    final hasCriteria = query.isNotEmpty || _filter != 'all' || _hasAdvancedFilters;
+    if (!hasCriteria) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Choose a search term or filter before saving a search.')));
+      return;
+    }
+
+    setState(() {
+      _savedSearch = _SavedMarketplaceSearch(
+        query: query,
+        type: _filter,
+        material: _material,
+        location: _location,
+        verifiedOnly: _verifiedOnly,
+        minimumQuantity: _minimumQuantity,
+      );
+    });
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Search saved for this session.')));
+  }
+
+  void _applySavedSearch() {
+    final search = _savedSearch;
+    if (search == null) return;
+    _search.text = search.query;
+    setState(() {
+      _filter = search.type;
+      _material = search.material;
+      _location = search.location;
+      _verifiedOnly = search.verifiedOnly;
+      _minimumQuantity = search.minimumQuantity;
+    });
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Saved search applied.')));
   }
 
   void _resetAllFilters() {
@@ -605,10 +813,12 @@ class _ActiveFilter extends StatelessWidget {
 }
 
 class _MarketplaceCard extends StatelessWidget {
-  const _MarketplaceCard({required this.listing, required this.requested, required this.onTap});
+  const _MarketplaceCard({required this.listing, required this.requested, required this.matchScore, required this.matchLabel, required this.onTap});
 
   final Listing listing;
   final bool requested;
+  final int matchScore;
+  final String matchLabel;
   final VoidCallback onTap;
 
   @override
@@ -651,9 +861,13 @@ class _MarketplaceCard extends StatelessWidget {
               Row(
                 children: [
                   Expanded(child: Text(listing.owner, style: const TextStyle(color: AppColors.slate, fontSize: 12))),
+                  Text('$matchScore%', style: AppTheme.dataStyle.copyWith(color: AppColors.green, fontSize: 12)),
+                  const SizedBox(width: 6),
                   if (requested) const Text('REQUEST SENT', style: TextStyle(color: AppColors.green, fontSize: 10, fontWeight: FontWeight.w700)),
                 ],
               ),
+              const SizedBox(height: 5),
+              Text(matchLabel, style: const TextStyle(color: AppColors.slate, fontSize: 11)),
             ],
           ),
         ),
@@ -734,22 +948,28 @@ class _DetailLine extends StatelessWidget {
       );
 }
 
-class _DealRequest {
-  const _DealRequest({
-    required this.material,
-    required this.owner,
-    required this.location,
-    required this.quantity,
-    required this.note,
-    required this.sentAt,
-  });
+class _SavedSearchBanner extends StatelessWidget {
+  const _SavedSearchBanner({required this.onApply, required this.onClear});
 
-  final String material;
-  final String owner;
-  final String location;
-  final String quantity;
-  final String note;
-  final DateTime sentAt;
+  final VoidCallback onApply;
+  final VoidCallback onClear;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(color: AppColors.green.withOpacity(0.08), border: Border.all(color: AppColors.green.withOpacity(0.25)), borderRadius: BorderRadius.circular(8)),
+      child: Row(
+        children: [
+          const Icon(Icons.bookmark_added_outlined, color: AppColors.green, size: 18),
+          const SizedBox(width: 8),
+          const Expanded(child: Text('A marketplace search is saved for this session.', style: TextStyle(fontSize: 12))),
+          TextButton(onPressed: onApply, child: const Text('Apply')),
+          IconButton(onPressed: onClear, tooltip: 'Remove saved search', icon: const Icon(Icons.close, size: 18)),
+        ],
+      ),
+    );
+  }
 }
 
 class _MarketplaceNavigationBar extends StatelessWidget {
