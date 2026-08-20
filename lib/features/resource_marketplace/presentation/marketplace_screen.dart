@@ -5,6 +5,8 @@ import '../../../app/theme.dart';
 import '../../../core/app_state.dart';
 import '../../../core/widgets.dart';
 import '../data/deal_request_repository.dart';
+import '../data/industrial_context_repository.dart';
+import '../presentation/marketplace_industry_context_card.dart';
 
 class MarketplaceScreen extends ConsumerStatefulWidget {
   const MarketplaceScreen({super.key, this.onHome});
@@ -36,6 +38,7 @@ class _SavedMarketplaceSearch {
 class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
   final _search = TextEditingController();
   final _dealRequestRepository = DealRequestRepository();
+  final _industrialContextRepository = IndustrialContextRepository();
   final _transactions = <DealRequestRecord>[];
   final _requestedListingKeys = <String>{};
 
@@ -49,11 +52,16 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
   bool _isLoadingHistory = true;
   bool _isSendingRequest = false;
   String? _historyError;
+  IndustrialContext? _industrialContext;
+  bool _isLoadingIndustrialContext = true;
+  String? _industrialContextError;
+  String _industrialContextLocation = 'Malaysia';
 
   @override
   void initState() {
     super.initState();
     Future<void>.microtask(_loadOutgoingRequests);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadIndustrialContext());
   }
 
   @override
@@ -89,6 +97,36 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
         _historyError = 'Firestore request history could not be loaded.';
       });
       debugPrint('Marketplace request history could not be loaded: $error');
+    }
+  }
+
+  Future<void> _loadIndustrialContext() async {
+    final allListings = ref.read(appStateProvider).listings;
+    final targetLocation = _location ??
+        (allListings.isNotEmpty ? allListings.first.location : 'Bayan Lepas, Penang');
+
+    setState(() {
+      _isLoadingIndustrialContext = true;
+      _industrialContextError = null;
+      _industrialContextLocation = targetLocation;
+    });
+
+    try {
+      final result = await _industrialContextRepository.fetchManufacturingContext(
+        marketplaceLocation: targetLocation,
+      );
+      if (!mounted) return;
+      setState(() {
+        _industrialContext = result;
+        _isLoadingIndustrialContext = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _isLoadingIndustrialContext = false;
+        _industrialContextError = 'Official industry data is temporarily unavailable.';
+      });
+      debugPrint('Marketplace industry context could not be loaded: $error');
     }
   }
 
@@ -229,6 +267,14 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
             const SizedBox(height: 10),
             _SavedSearchBanner(onApply: _applySavedSearch, onClear: () => setState(() => _savedSearch = null)),
           ],
+          const SizedBox(height: 16),
+          MarketplaceIndustryContextCard(
+            context: _industrialContext,
+            selectedLocation: _industrialContextLocation,
+            isLoading: _isLoadingIndustrialContext,
+            errorMessage: _industrialContextError,
+            onRefresh: _loadIndustrialContext,
+          ),
           const SizedBox(height: 22),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
