@@ -24,13 +24,19 @@ The app expects a `.env` file in the project root with the following values:
 
 ```env
 SUPABASE_URL=https://your-project.supabase.co
-SUPABASE_PUBLISHABLE_KEY=your-publishable-key
-AI_BASE_URL=https://your-compatible-chat-endpoint/v1
-AI_API_KEY=your-api-key
-AI_MODEL=your-model-name
+SUPABASE_PUBLISHABLE_KEY=your-publishable-or-anon-key
 ```
 
-`AI_BASE_URL`, `AI_API_KEY`, and `AI_MODEL` are optional. SkillMatch has a deterministic curated fallback when an AI endpoint is not configured. Supabase remains required for the current application bootstrap and for persisted profile, listing, programme, and deal-request records.
+The private AI key does **not** belong in the Flutter `.env` file. When configured, the shared AI service is actively used by **SkillMatch** to structure workforce requests and by **FairPrice** to generate negotiation dialogue, counter-position guidance, and risk flags. Without the AI service, both modules still run using deterministic local fallback logic. Supabase remains required for the current application bootstrap and for persisted profile, listing, market-signal, programme, and deal-request records.
+
+After linking your Supabase project, configure the AI provider as Edge Function secrets and deploy the proxy:
+
+```bash
+supabase secrets set AI_API_KEY=your-api-key AI_BASE_URL=https://api.openai.com/v1 AI_MODEL=gpt-4o-mini
+supabase functions deploy ai-chat
+```
+
+For another OpenAI-compatible provider, replace `AI_BASE_URL` and `AI_MODEL` with that provider’s values. The Flutter client calls the authenticated `ai-chat` function; the provider key remains server-side.
 
 ## Data expectations
 
