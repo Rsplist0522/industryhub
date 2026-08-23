@@ -1,42 +1,38 @@
-import 'dart:convert';
-
-import 'package:flutter_dotenv/flutter_dotenv.dart';
-import 'package:http/http.dart' as http;
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 class AiService {
   const AiService();
 
   Future<Map<String, dynamic>> callAI(String systemPrompt, String userInput) async {
-    final baseUrl = dotenv.env['AI_BASE_URL'];
-    final apiKey = dotenv.env['AI_API_KEY'];
-    final model = dotenv.env['AI_MODEL'] ?? 'gpt-4o-mini';
-    if (baseUrl == null || apiKey == null || apiKey.isEmpty) {
-      return _localFallback(userInput);
+    try {
+      final response = await Supabase.instance.client.functions.invoke(
+        'ai-chat',
+        body: {'system_prompt': systemPrompt, 'user_input': userInput},
+      );
+      if (response.status < 200 || response.status >= 300) {
+        throw Exception('AI proxy returned HTTP ${response.status}.');
+      }
+      final data = response.data;
+      if (data is! Map) throw const FormatException('AI proxy returned an invalid response.');
+      final result = Map<String, dynamic>.from(data);
+      if (result['error'] is String) throw Exception(result['error'] as String);
+      result['__source'] = 'ai';
+      return result;
+    } catch (_) {
+      return {..._localFallback(userInput), '__source': 'local_fallback'};
     }
-
-    final response = await http.post(
-      Uri.parse('$baseUrl/chat/completions'),
-      headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $apiKey'},
-      body: jsonEncode({
-        'model': model,
-        'temperature': 0.1,
-        'response_format': {'type': 'json_object'},
-        'messages': [
-          {'role': 'system', 'content': '$systemPrompt Return JSON only. Do not use markdown fences or a preamble.'},
-          {'role': 'user', 'content': userInput},
-        ],
-      }),
-    );
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw Exception('AI service returned HTTP ${response.statusCode}.');
-    }
-    final decoded = jsonDecode(response.body) as Map<String, dynamic>;
-    final content = ((decoded['choices'] as List).first as Map<String, dynamic>)['message'] as Map<String, dynamic>;
-    final text = (content['content'] as String).replaceAll('```json', '').replaceAll('```', '').trim();
-    return jsonDecode(text) as Map<String, dynamic>;
   }
 
   Map<String, dynamic> _localFallback(String input) {
+    if (input.startsWith('FAIRPRICE_NEGOTIATION')) {
+      return {
+        'buyer_message': 'The offer should be discussed against the transparent reference band, material condition, volume, and logistics rather than treated as a fixed market quote.',
+        'counter_offer_rm_per_kg': null,
+        'recommended_strategy': 'Use the calculated target as your opening position and protect the floor unless quality or collection terms improve.',
+        'risk_flags': ['AI proxy unavailable', 'Confirm local grade and logistics before agreement'],
+      };
+    }
+
     final lower = input.toLowerCase();
     return {
       'skills': [if (lower.contains('quality')) 'Quality systems' else 'CNC machining', 'Lean manufacturing'],

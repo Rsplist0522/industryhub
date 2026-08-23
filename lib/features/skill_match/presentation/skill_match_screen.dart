@@ -8,6 +8,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../app/theme.dart';
 import '../../../core/app_state.dart';
+import '../../../core/services.dart';
 import '../../../core/widgets.dart';
 import '../data/training_programme_repository.dart';
 
@@ -112,6 +113,7 @@ class _SkillMatchScreenState extends ConsumerState<SkillMatchScreen> {
   final _scrollController = ScrollController();
   final _savedProgramIds = <String>{};
   final _trainingProgrammeRepository = TrainingProgrammeRepository();
+  final _aiService = const AiService();
   final _messages = <_ChatLine>[
     const _ChatLine(
       'Tell me what capability you need to build. Include the role, current experience, shift coverage, or certification requirement.',
@@ -196,10 +198,19 @@ class _SkillMatchScreenState extends ConsumerState<SkillMatchScreen> {
     });
     _scrollToBottom();
 
-    await Future<void>.delayed(const Duration(milliseconds: 650));
+    Map<String, dynamic> aiResponse;
+    try {
+      aiResponse = await _aiService.callAI(
+        'You are SkillMatch, a workforce-planning assistant for Malaysian industrial SMEs. Extract a structured workforce brief from the user request. Return exactly these JSON keys: intent, role, skills (array of concise skill names), experience, shift, certification, assistant_message. Use concise plain text. Never invent a specific training provider or promise employment.',
+        text,
+      );
+    } catch (error) {
+      debugPrint('SkillMatch AI call failed; using local extraction: $error');
+      aiResponse = const {'__source': 'local_error'};
+    }
     if (!mounted) return;
 
-    final requirement = _extractRequirement(text);
+    final requirement = _requirementFromAi(text, aiResponse);
     final ranking = await _rankProgrammes(requirement);
     if (!mounted) return;
 
@@ -209,14 +220,63 @@ class _SkillMatchScreenState extends ConsumerState<SkillMatchScreen> {
       _lastNeedText = text;
       _programs = ranking.programmes;
       _catalogueStatus = ranking.catalogueStatus;
-      _messages.add(
-        _ChatLine(
-          'I created a ${requirement.intent.toLowerCase()} brief for a ${requirement.role.toLowerCase()} and ranked ${ranking.programmes.length} relevant programme options. Review the brief, then save the programmes that fit your team plan.',
-          false,
-        ),
-      );
+      final assistantMessage = aiResponse['assistant_message'] is String && (aiResponse['assistant_message'] as String).trim().isNotEmpty
+          ? (aiResponse['assistant_message'] as String).trim()
+          : 'I created a ${requirement.intent.toLowerCase()} brief for a ${requirement.role.toLowerCase()} and ranked ${ranking.programmes.length} relevant programme options.';
+      final sourceLabel = aiResponse['__source'] == 'ai' ? 'AI-assisted brief.' : 'Local structured fallback used; add an AI key for conversational extraction.';
+      _messages.add(_ChatLine('$assistantMessage $sourceLabel Review the brief, then save the programmes that fit your team plan.', false));
     });
     _scrollToBottom();
+  }
+
+  _Requirement _requirementFromAi(String text, Map<String, dynamic> response) {
+    final local = _extractRequirement(text);
+    final aiSkills = _normaliseSkills(response['skills']);
+    return _Requirement(
+      intent: _textOr(response['intent'], local.intent),
+      role: _textOr(response['role'], local.role),
+      skills: aiSkills.isEmpty ? local.skills : aiSkills,
+      experience: _textOr(response['experience'], _textOr(response['experience_level'], local.experience)),
+      shift: _textOr(response['shift'], local.shift),
+      certification: _textOr(response['certification'], _textOr(response['certifications'], local.certification)),
+    );
+  }
+
+  List<String> _normaliseSkills(dynamic value) {
+    if (value is! List) return const [];
+    const aliases = <String, String>{
+      'cnc': 'CNC machining',
+      'cnc machining': 'CNC machining',
+      'machining': 'CNC machining',
+      'lean': 'Lean manufacturing',
+      'lean manufacturing': 'Lean manufacturing',
+      'quality': 'Quality systems',
+      'quality systems': 'Quality systems',
+      'iso': 'Quality systems',
+      'welding': 'Welding',
+      'weld': 'Welding',
+      'safety': 'Occupational safety',
+      'osh': 'Occupational safety',
+      'team supervision': 'Team supervision',
+      'supervision': 'Team supervision',
+      'production planning': 'Production planning',
+      'planning': 'Production planning',
+    };
+    final skills = <String>[];
+    for (final item in value) {
+      if (item is! String) continue;
+      final label = item.trim();
+      if (label.isEmpty) continue;
+      final canonical = aliases[label.toLowerCase()] ?? label;
+      if (!skills.contains(canonical)) skills.add(canonical);
+    }
+    return skills.take(6).toList();
+  }
+
+  String _textOr(dynamic value, String fallback) {
+    if (value is String && value.trim().isNotEmpty) return value.trim();
+    if (value is List && value.isNotEmpty && value.first is String) return (value.first as String).trim();
+    return fallback;
   }
 
   _Requirement _extractRequirement(String text) {

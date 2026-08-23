@@ -8,6 +8,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../app/theme.dart';
 import '../../../core/app_state.dart';
+import '../../../core/services.dart';
 import '../../../core/widgets.dart';
 import '../data/market_price_repository.dart';
 
@@ -48,6 +49,16 @@ class _NegotiationResult {
   String get rangeLabel => 'RM ${floor.toStringAsFixed(2)} — ${ceiling.toStringAsFixed(2)} / kg';
 }
 
+class _AiNegotiationAdvice {
+  const _AiNegotiationAdvice({required this.buyerMessage, required this.strategy, required this.counterOffer, required this.riskFlags, required this.sourceLabel});
+
+  final String buyerMessage;
+  final String strategy;
+  final double? counterOffer;
+  final List<String> riskFlags;
+  final String sourceLabel;
+}
+
 class FairPriceScreen extends ConsumerStatefulWidget {
   const FairPriceScreen({super.key});
 
@@ -69,6 +80,8 @@ class _FairPriceScreenState extends ConsumerState<FairPriceScreen> {
   String _collection = 'Buyer collects';
   _NegotiationResult? _result;
   final _marketPriceRepository = MarketPriceRepository();
+  final _aiService = const AiService();
+  _AiNegotiationAdvice? _aiAdvice;
   CommodityPriceObservation? _commoditySignal;
   PriceIndexObservation? _ppiSignal;
   bool _isLoadingMarketSignals = true;
@@ -128,11 +141,25 @@ class _FairPriceScreenState extends ConsumerState<FairPriceScreen> {
       proposedPrice: proposedPrice,
     );
 
+    Map<String, dynamic> aiResponse;
+    try {
+      aiResponse = await _aiService.callAI(
+        'You are FairPrice, a negotiation assistant for Malaysian industrial SMEs. Analyze an offer using only the supplied indicative band, material terms, and external context. Never claim a live market quote, never invent a supplier or buyer, and never present a price as guaranteed. Return exactly these JSON keys: buyer_message, recommended_strategy, counter_offer_rm_per_kg (number or null), risk_flags (array of concise strings).',
+        _negotiationPrompt(result),
+      );
+    } catch (error) {
+      debugPrint('FairPrice AI call failed; using transparent local strategy: $error');
+      aiResponse = const <String, dynamic>{'__source': 'local_error'};
+    }
+    if (!mounted) return;
+    final advice = _adviceFromAi(aiResponse, result);
+
     setState(() {
       _isRunning = true;
       _isSaved = false;
       _round = 1;
       _result = null;
+      _aiAdvice = advice;
       _messages
         ..clear()
         ..add(
@@ -145,7 +172,7 @@ class _FairPriceScreenState extends ConsumerState<FairPriceScreen> {
     setState(() {
       _round = 2;
       _messages.add(
-        'Round 2 / Buyer response: ${_condition.toLowerCase()} material with ${_collection.toLowerCase()} changes the negotiation position. ${result.adjustments.join(' ')}',
+        'Round 2 / AI negotiation assistant: ${advice.buyerMessage} ${advice.counterOffer == null ? '' : 'Suggested counter position: RM ${advice.counterOffer!.toStringAsFixed(2)}/kg.'} Source: ${advice.sourceLabel}.',
       );
     });
 
@@ -155,9 +182,36 @@ class _FairPriceScreenState extends ConsumerState<FairPriceScreen> {
       _round = 3;
       _isRunning = false;
       _result = result;
-      _messages.add('Round 3 / Recommendation: ${result.strategy}');
+      _messages.add('Round 3 / Recommendation: ${advice.strategy} ${result.adjustments.join(' ')}');
     });
   }
+
+  String _negotiationPrompt(_NegotiationResult result) => '''
+Material: ${result.product}
+Quantity: ${result.quantity.toStringAsFixed(2)} kg
+Proposed price: RM ${result.proposedPrice.toStringAsFixed(2)}/kg
+Indicative band: RM ${result.floor.toStringAsFixed(2)}–${result.ceiling.toStringAsFixed(2)}/kg
+Condition: $_condition
+Collection terms: $_collection
+Reference adjustments: ${result.adjustments.join(' ')}
+External context loaded: ${_commoditySignal?.seriesName ?? 'No material-specific commodity series'}; Malaysia PPI ${_ppiSignal?.indexValue.toStringAsFixed(1) ?? 'unavailable'}.
+''';
+
+  _AiNegotiationAdvice _adviceFromAi(Map<String, dynamic> response, _NegotiationResult result) {
+    final counter = response['counter_offer_rm_per_kg'];
+    final rawCounterOffer = counter is num ? counter.toDouble() : null;
+    final safeCounterOffer = rawCounterOffer?.clamp(result.floor, result.ceiling).toDouble();
+    final riskFlags = response['risk_flags'];
+    return _AiNegotiationAdvice(
+      buyerMessage: _responseText(response['buyer_message'], 'The offer should be discussed against the transparent reference band and the stated quality and logistics terms.'),
+      strategy: _responseText(response['recommended_strategy'], result.strategy),
+      counterOffer: safeCounterOffer,
+      riskFlags: riskFlags is List ? riskFlags.whereType<String>().take(4).toList() : const ['Confirm local grade and logistics before agreement'],
+      sourceLabel: response['__source'] == 'ai' ? 'AI negotiation assistant' : 'Deterministic fallback; add an AI key for conversational negotiation.',
+    );
+  }
+
+  String _responseText(dynamic value, String fallback) => value is String && value.trim().isNotEmpty ? value.trim() : fallback;
 
   _NegotiationResult _calculateResult({
     required String product,
@@ -286,14 +340,15 @@ class _FairPriceScreenState extends ConsumerState<FairPriceScreen> {
     _product.text = 'Aluminium machining offcuts';
     _price.text = '48';
     _quantity.text = '500';
-    setState(() {
-      _condition = 'Sorted & dry';
-      _collection = 'Buyer collects';
-      _round = 0;
-      _isSaved = false;
-      _result = null;
-      _messages.clear();
-    });
+      setState(() {
+        _condition = 'Sorted & dry';
+        _collection = 'Buyer collects';
+        _round = 0;
+        _isSaved = false;
+        _result = null;
+        _aiAdvice = null;
+        _messages.clear();
+      });
   }
 
   void _goBack() {
@@ -433,7 +488,7 @@ class _FairPriceScreenState extends ConsumerState<FairPriceScreen> {
           ],
           if (_result != null) ...[
             const SizedBox(height: 24),
-            _PriceResult(result: _result!, isSaved: _isSaved, onSave: _saveRecommendation),
+            _PriceResult(result: _result!, advice: _aiAdvice, isSaved: _isSaved, onSave: _saveRecommendation),
           ],
         ],
       ),
@@ -555,9 +610,10 @@ class _MarketSignalLine extends StatelessWidget {
 }
 
 class _PriceResult extends StatelessWidget {
-  const _PriceResult({required this.result, required this.isSaved, required this.onSave});
+  const _PriceResult({required this.result, required this.advice, required this.isSaved, required this.onSave});
 
   final _NegotiationResult result;
+  final _AiNegotiationAdvice? advice;
   final bool isSaved;
   final VoidCallback onSave;
 
@@ -579,6 +635,34 @@ class _PriceResult extends StatelessWidget {
             _RangeLine(floor: result.floor, target: result.target, ceiling: result.ceiling),
             const SizedBox(height: 15),
             Text(result.strategy, style: TextStyle(color: AppColors.white.withValues(alpha: 0.88), height: 1.4)),
+            if (advice != null) ...[
+              const SizedBox(height: 14),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(color: AppColors.white.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(8), border: Border.all(color: AppColors.white.withValues(alpha: 0.18))),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('AI NEGOTIATION GUIDANCE', style: AppTheme.eyebrowStyle.copyWith(color: AppColors.white.withValues(alpha: 0.68))),
+                    const SizedBox(height: 8),
+                    Text(advice!.buyerMessage, style: TextStyle(color: AppColors.white.withValues(alpha: 0.9), height: 1.35)),
+                    if (advice!.counterOffer != null) ...[
+                      const SizedBox(height: 8),
+                      Text('Suggested counter-position: RM ${advice!.counterOffer!.toStringAsFixed(2)}/kg', style: const TextStyle(color: AppColors.white, fontWeight: FontWeight.w700)),
+                    ],
+                    const SizedBox(height: 8),
+                    Text('Strategy: ${advice!.strategy}', style: TextStyle(color: AppColors.white.withValues(alpha: 0.82), height: 1.35)),
+                    if (advice!.riskFlags.isNotEmpty) ...[
+                      const SizedBox(height: 8),
+                      Text('Checks: ${advice!.riskFlags.join(' · ')}', style: TextStyle(color: AppColors.white.withValues(alpha: 0.7), fontSize: 11, height: 1.35)),
+                    ],
+                    const SizedBox(height: 8),
+                    Text('Source: ${advice!.sourceLabel}', style: TextStyle(color: AppColors.white.withValues(alpha: 0.58), fontSize: 11)),
+                  ],
+                ),
+              ),
+            ],
             const SizedBox(height: 12),
             Text('Basis: ${result.product} · ${result.quantity.toStringAsFixed(0)} kg · ${result.benchmark.label}', style: TextStyle(color: AppColors.white.withValues(alpha: 0.66), fontSize: 11, height: 1.35)),
             const SizedBox(height: 15),

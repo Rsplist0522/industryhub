@@ -14,6 +14,15 @@ IndustryHub now gives every module a named source and stores source provenance i
 
 Run `supabase/migrations/202608230001_industryhub_core.sql` with `supabase db push`, or paste that file once into the Supabase SQL Editor. It creates the module tables, source metadata, seeded observations, indexes, triggers, and baseline Row Level Security policies.
 
-## Optional AI service
+## AI service for Modules 1 and 2
 
-The current SkillMatch experience does not require an AI key. It uses deterministic requirement extraction, Supabase programme records, and a curated fallback catalogue. The repository contains an optional `AiService` contract for a future chat-completion integration. If that integration is wired into the UI later, provide `AI_BASE_URL`, `AI_API_KEY`, and `AI_MODEL` in the local `.env` file and keep the API key on a trusted server rather than shipping it in a mobile build.
+A single OpenAI-compatible configuration is shared by both AI-enabled modules. **SkillMatch** sends each workforce brief to the assistant for structured requirement extraction and a conversational response before ranking the Supabase programme catalogue. **FairPrice** sends the transparent reference band, material terms, and external market context to the assistant for negotiation dialogue, counter-position guidance, and risk flags. The deterministic local logic remains as a fallback when the AI variables are absent or the provider is unavailable.
+
+The Flutter app’s local `.env` contains only the public Supabase URL and publishable key. Configure the private AI provider as Supabase Edge Function secrets and deploy the included proxy:
+
+```bash
+supabase secrets set AI_API_KEY=your-api-key AI_BASE_URL=https://api.openai.com/v1 AI_MODEL=gpt-4o-mini
+supabase functions deploy ai-chat
+```
+
+The Flutter client calls the authenticated `ai-chat` function. The function then calls `POST {AI_BASE_URL}/chat/completions` with the bearer token and JSON response format. Keep the provider key server-side; never ship it in an Android or iOS build. The fallback mode is functional, but it is not the AI chatbot experience.
