@@ -18,6 +18,7 @@ class Listing {
     required this.owner,
     required this.ownerId,
     this.verified = false,
+    this.askingPricePerKg,
   });
 
   final String id;
@@ -30,8 +31,9 @@ class Listing {
   final String owner;
   final String ownerId;
   final bool verified;
+  final double? askingPricePerKg;
 
-  Listing copyWith({String? owner}) => Listing(
+  Listing copyWith({String? owner, double? askingPricePerKg}) => Listing(
         id: id,
         type: type,
         material: material,
@@ -42,6 +44,7 @@ class Listing {
         owner: owner ?? this.owner,
         ownerId: ownerId,
         verified: verified,
+        askingPricePerKg: askingPricePerKg ?? this.askingPricePerKg,
       );
 
   factory Listing.fromSupabase(Map<String, dynamic> data) {
@@ -57,6 +60,7 @@ class Listing {
       owner: data['owner'] as String? ?? 'Unspecified business',
       ownerId: data['owner_id'] as String? ?? '',
       verified: data['verified'] as bool? ?? false,
+      askingPricePerKg: (data['asking_price_per_kg'] as num?)?.toDouble(),
     );
   }
 }
@@ -228,6 +232,7 @@ class IndustryHubNotifier extends Notifier<IndustryHubState> {
     required String unit,
     required String location,
     required String description,
+    double? askingPricePerKg,
   }) async {
     final user = await _ensureSignedInUser();
     if (user == null) return;
@@ -242,6 +247,7 @@ class IndustryHubNotifier extends Notifier<IndustryHubState> {
             'unit': unit,
             'location': location.trim(),
             'description': description.trim(),
+            'asking_price_per_kg': askingPricePerKg,
             'owner': state.profile.businessName,
             'owner_id': user.id,
           })

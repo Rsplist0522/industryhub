@@ -213,6 +213,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     final quantity = TextEditingController();
     final location = TextEditingController();
     final description = TextEditingController();
+    final askingPricePerKg = TextEditingController();
     final formKey = GlobalKey<FormState>();
     var type = 'supply';
     var unit = 'kg';
@@ -268,6 +269,13 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     ],
                   ),
                   const SizedBox(height: 12),
+                  TextFormField(
+                    controller: askingPricePerKg,
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    decoration: const InputDecoration(labelText: 'Asking price per kg (optional)'),
+                    validator: _nonNegativePrice,
+                  ),
+                  const SizedBox(height: 12),
                   TextFormField(controller: location, decoration: const InputDecoration(labelText: 'Location'), validator: _requiredText),
                   const SizedBox(height: 12),
                   TextFormField(controller: description, maxLines: 3, maxLength: 240, decoration: const InputDecoration(labelText: 'Material condition or collection notes (optional)', alignLabelWithHint: true)),
@@ -287,6 +295,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     material: material.text.trim(),
                     quantity: double.parse(quantity.text.trim()),
                     unit: unit,
+                    askingPricePerKg: double.tryParse(askingPricePerKg.text.trim()),
                     location: location.text.trim(),
                     description: description.text.trim(),
                   ),
@@ -307,6 +316,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     quantity.dispose();
     location.dispose();
     description.dispose();
+    askingPricePerKg.dispose();
 
     if (draft == null || !mounted) return;
     await ref.read(appStateProvider.notifier).addListing(
@@ -314,6 +324,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           material: draft.material,
           quantity: draft.quantity,
           unit: draft.unit,
+          askingPricePerKg: draft.askingPricePerKg,
           location: draft.location,
           description: draft.description,
         );
@@ -346,6 +357,13 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     if (amount == null || amount <= 0) return 'Enter a quantity above zero.';
     return null;
   }
+
+  String? _nonNegativePrice(String? value) {
+    if (value == null || value.trim().isEmpty) return null;
+    final amount = double.tryParse(value.trim());
+    if (amount == null || amount < 0) return 'Enter a valid non-negative price.';
+    return null;
+  }
 }
 
 class _ListingDraft {
@@ -354,6 +372,7 @@ class _ListingDraft {
     required this.material,
     required this.quantity,
     required this.unit,
+    this.askingPricePerKg,
     required this.location,
     required this.description,
   });
@@ -362,6 +381,7 @@ class _ListingDraft {
   final String material;
   final double quantity;
   final String unit;
+  final double? askingPricePerKg;
   final String location;
   final String description;
 }
@@ -543,7 +563,7 @@ class _ListingRow extends StatelessWidget {
         contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
         leading: Icon(isSupply ? Icons.arrow_upward : Icons.arrow_downward, color: color),
         title: Text(listing.material, style: const TextStyle(fontWeight: FontWeight.w700)),
-        subtitle: Text('${listing.quantity.toStringAsFixed(0)} ${listing.unit} · ${listing.location}\n${isSupply ? 'Supply listing' : 'Demand listing'}'),
+        subtitle: Text('${listing.quantity.toStringAsFixed(0)} ${listing.unit} · ${listing.location}\n${isSupply ? 'Supply listing' : 'Demand listing'}${listing.askingPricePerKg == null ? '' : ' · RM ${listing.askingPricePerKg!.toStringAsFixed(2)}/kg'}'),
         isThreeLine: true,
         trailing: IconButton(onPressed: onDelete, tooltip: 'Remove listing', icon: const Icon(Icons.delete_outline, color: AppColors.rust)),
       ),

@@ -13,12 +13,13 @@ import '../../../core/widgets.dart';
 import '../data/market_price_repository.dart';
 
 class _Benchmark {
-  const _Benchmark({required this.label, required this.low, required this.high, required this.note});
+  const _Benchmark({required this.label, required this.low, required this.high, required this.note, required this.isLiveEvidence});
 
   final String label;
   final double low;
   final double high;
   final String note;
+  final bool isLiveEvidence;
 
   double get midpoint => (low + high) / 2;
 }
@@ -49,6 +50,13 @@ class _NegotiationResult {
   String get rangeLabel => 'RM ${floor.toStringAsFixed(2)} — ${ceiling.toStringAsFixed(2)} / kg';
 }
 
+class _PriceChatLine {
+  const _PriceChatLine(this.text, this.isUser);
+
+  final String text;
+  final bool isUser;
+}
+
 class _AiNegotiationAdvice {
   const _AiNegotiationAdvice({required this.buyerMessage, required this.strategy, required this.counterOffer, required this.riskFlags, required this.sourceLabel});
 
@@ -72,8 +80,11 @@ class _FairPriceScreenState extends ConsumerState<FairPriceScreen> {
   final _quantity = TextEditingController(text: '500');
   final _formKey = GlobalKey<FormState>();
   final _messages = <String>[];
+  final _chatInput = TextEditingController();
+  final _chatMessages = <_PriceChatLine>[];
 
   bool _isRunning = false;
+  bool _isChatThinking = false;
   bool _isSaved = false;
   int _round = 0;
   String _condition = 'Sorted & dry';
@@ -83,7 +94,9 @@ class _FairPriceScreenState extends ConsumerState<FairPriceScreen> {
   final _aiService = const AiService();
   _AiNegotiationAdvice? _aiAdvice;
   CommodityPriceObservation? _commoditySignal;
+  PriceIndexObservation? _materialIndexSignal;
   PriceIndexObservation? _ppiSignal;
+  List<LocalListingPrice> _localListingPrices = const [];
   bool _isLoadingMarketSignals = true;
 
   static const _conditions = ['Mixed / unsorted', 'Sorted & dry', 'Verified grade'];
@@ -100,18 +113,24 @@ class _FairPriceScreenState extends ConsumerState<FairPriceScreen> {
     setState(() => _isLoadingMarketSignals = true);
     try {
       final commodity = await _marketPriceRepository.fetchLatestCommodity(product);
+      final materialIndex = await _marketPriceRepository.fetchLatestMaterialIndex(product);
       final ppi = await _marketPriceRepository.fetchLatestMalaysiaPpi();
+      final localListingPrices = await _marketPriceRepository.fetchLatestLocalListingPrices(product);
       if (!mounted) return;
       setState(() {
         _commoditySignal = commodity;
+        _materialIndexSignal = materialIndex;
         _ppiSignal = ppi;
+        _localListingPrices = localListingPrices;
         _isLoadingMarketSignals = false;
       });
     } catch (error) {
       if (!mounted) return;
       setState(() {
         _commoditySignal = null;
+        _materialIndexSignal = null;
         _ppiSignal = null;
+        _localListingPrices = const [];
         _isLoadingMarketSignals = false;
       });
       debugPrint('FairPrice market signals could not be loaded: $error');
@@ -123,6 +142,7 @@ class _FairPriceScreenState extends ConsumerState<FairPriceScreen> {
     _product.dispose();
     _price.dispose();
     _quantity.dispose();
+    _chatInput.dispose();
     super.dispose();
   }
 
@@ -186,6 +206,56 @@ class _FairPriceScreenState extends ConsumerState<FairPriceScreen> {
     });
   }
 
+  Future<void> _sendChat() async {
+    final text = _chatInput.text.trim();
+    if (text.isEmpty || _isChatThinking) return;
+    final result = _result;
+    if (result == null) {
+      setState(() => _chatMessages.add(const _PriceChatLine('Run the negotiation first, then ask me about a counter-offer, buyer objection, quality evidence, or logistics terms.', false)));
+      return;
+    }
+
+    _chatInput.clear();
+    setState(() {
+      _chatMessages.add(_PriceChatLine(text, true));
+      _isChatThinking = true;
+    });
+
+    try {
+      final response = await _aiService.callAI(
+        'You are FairPrice, a negotiation assistant for Malaysian industrial SMEs. Continue the conversation using only the supplied scenario and transparent range. Never claim a live quote, never invent a buyer or supplier, and never guarantee a price. Return exactly these JSON keys: buyer_message, recommended_strategy, counter_offer_rm_per_kg (number or null), risk_flags (array of concise strings).',
+        _followUpPrompt(result, text),
+      );
+      if (!mounted) return;
+      final advice = _adviceFromAi(response, result);
+      setState(() {
+        _isChatThinking = false;
+        _chatMessages.add(_PriceChatLine('${advice.buyerMessage} ${advice.counterOffer == null ? '' : 'Suggested position: RM ${advice.counterOffer!.toStringAsFixed(2)}/kg.'} ${advice.strategy} Source: ${advice.sourceLabel}.', false));
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _isChatThinking = false;
+        _chatMessages.add(const _PriceChatLine('I could not respond right now. Check the AI Edge Function configuration and try again.', false));
+      });
+      debugPrint('FairPrice follow-up chat failed: $error');
+    }
+  }
+
+  String _followUpPrompt(_NegotiationResult result, String message) {
+    final history = _chatMessages.take(8).map((line) => '${line.isUser ? 'User' : 'Assistant'}: ${line.text}').join('\n');
+    return '''
+Scenario:
+${_negotiationPrompt(result)}
+
+Conversation:
+$history
+
+New user message:
+$message
+''';
+  }
+
   String _negotiationPrompt(_NegotiationResult result) => '''
 Material: ${result.product}
 Quantity: ${result.quantity.toStringAsFixed(2)} kg
@@ -194,7 +264,7 @@ Indicative band: RM ${result.floor.toStringAsFixed(2)}–${result.ceiling.toStri
 Condition: $_condition
 Collection terms: $_collection
 Reference adjustments: ${result.adjustments.join(' ')}
-External context loaded: ${_commoditySignal?.seriesName ?? 'No material-specific commodity series'}; Malaysia PPI ${_ppiSignal?.indexValue.toStringAsFixed(1) ?? 'unavailable'}.
+External context loaded: ${_materialIndexSignal?.series ?? 'No material-specific price index'}; Malaysia PPI ${_ppiSignal?.indexValue.toStringAsFixed(1) ?? 'unavailable'}; local Supabase listing observations ${_localListingPrices.length}.
 ''';
 
   _AiNegotiationAdvice _adviceFromAi(Map<String, dynamic> response, _NegotiationResult result) {
@@ -218,7 +288,7 @@ External context loaded: ${_commoditySignal?.seriesName ?? 'No material-specific
     required double quantity,
     required double proposedPrice,
   }) {
-    final benchmark = _benchmarkFor(product);
+    final benchmark = _benchmarkFor(product, proposedPrice);
     var floor = benchmark.low;
     var ceiling = benchmark.high;
     final adjustments = <String>[];
@@ -279,45 +349,24 @@ External context loaded: ${_commoditySignal?.seriesName ?? 'No material-specific
     );
   }
 
-  _Benchmark _benchmarkFor(String product) {
-    final lower = product.toLowerCase();
-    if (lower.contains('copper')) {
-      return const _Benchmark(
-        label: 'Copper-bearing material / indicative reference',
-        low: 24.00,
-        high: 32.00,
-        note: 'Use only as a demonstration reference; cable grade and contamination materially change value.',
+  _Benchmark _benchmarkFor(String product, double proposedPrice) {
+    final prices = _localListingPrices.map((listing) => listing.pricePerKg).where((price) => price > 0).toList()..sort();
+    if (prices.isEmpty) {
+      return _Benchmark(
+        label: 'No live local benchmark loaded',
+        low: proposedPrice,
+        high: proposedPrice,
+        note: 'No comparable Supabase listing has published an asking price for this material. The entered price is a negotiation anchor, not a market quote.',
+        isLiveEvidence: false,
       );
     }
-    if (lower.contains('steel') || lower.contains('iron')) {
-      return const _Benchmark(
-        label: 'Ferrous offcuts / indicative reference',
-        low: 0.90,
-        high: 1.70,
-        note: 'Use only as a demonstration reference; grade, preparation, and collection costs matter.',
-      );
-    }
-    if (lower.contains('plastic') || lower.contains('polymer')) {
-      return const _Benchmark(
-        label: 'Recyclable plastic / indicative reference',
-        low: 0.70,
-        high: 1.40,
-        note: 'Use only as a demonstration reference; resin type and contamination materially change value.',
-      );
-    }
-    if (lower.contains('aluminium') || lower.contains('aluminum')) {
-      return const _Benchmark(
-        label: 'Aluminium machining offcuts / indicative reference',
-        low: 42.00,
-        high: 55.00,
-        note: 'Use only as a demonstration reference; alloy, moisture, and collection terms change value.',
-      );
-    }
-    return const _Benchmark(
-      label: 'General industrial material / indicative reference',
-      low: 18.00,
-      high: 28.00,
-      note: 'Use only as a demonstration reference until an approved material-specific benchmark is connected.',
+
+    return _Benchmark(
+      label: 'Live Supabase comparable listings',
+      low: prices.first,
+      high: prices.last,
+      note: 'Based on ${prices.length} published asking-price observation${prices.length == 1 ? '' : 's'} in the live marketplace. Confirm grade, quantity, and logistics before agreement.',
+      isLiveEvidence: true,
     );
   }
 
@@ -346,8 +395,9 @@ External context loaded: ${_commoditySignal?.seriesName ?? 'No material-specific
         _round = 0;
         _isSaved = false;
         _result = null;
-        _aiAdvice = null;
-        _messages.clear();
+      _aiAdvice = null;
+      _chatMessages.clear();
+      _messages.clear();
       });
   }
 
@@ -369,7 +419,7 @@ External context loaded: ${_commoditySignal?.seriesName ?? 'No material-specific
 
   @override
   Widget build(BuildContext context) {
-    final previewBenchmark = _benchmarkFor(_product.text.trim());
+    final previewBenchmark = _benchmarkFor(_product.text.trim(), double.tryParse(_price.text.trim()) ?? 0);
 
     return Scaffold(
       appBar: AppBar(
@@ -383,7 +433,7 @@ External context loaded: ${_commoditySignal?.seriesName ?? 'No material-specific
           IconButton(
             icon: const Icon(Icons.restart_alt),
             tooltip: 'Reset scenario',
-            onPressed: _isRunning ? null : _resetScenario,
+            onPressed: (_isRunning || _isChatThinking) ? null : _resetScenario,
           ),
         ],
       ),
@@ -465,11 +515,13 @@ External context loaded: ${_commoditySignal?.seriesName ?? 'No material-specific
           const SpecDivider(label: 'INDICATIVE REFERENCE'),
           const SizedBox(height: 14),
           _BenchmarkCard(benchmark: previewBenchmark),
-          if (_isLoadingMarketSignals || _commoditySignal != null || _ppiSignal != null) ...[
+          if (_isLoadingMarketSignals || _commoditySignal != null || _materialIndexSignal != null || _ppiSignal != null || _localListingPrices.isNotEmpty) ...[
             const SizedBox(height: 12),
             _MarketSignalCard(
               commodity: _commoditySignal,
+              materialIndex: _materialIndexSignal,
               ppi: _ppiSignal,
+              localListingPrices: _localListingPrices,
               isLoading: _isLoadingMarketSignals,
             ),
           ],
@@ -489,6 +541,13 @@ External context loaded: ${_commoditySignal?.seriesName ?? 'No material-specific
           if (_result != null) ...[
             const SizedBox(height: 24),
             _PriceResult(result: _result!, advice: _aiAdvice, isSaved: _isSaved, onSave: _saveRecommendation),
+            const SizedBox(height: 24),
+            const SpecDivider(label: 'CHAT WITH FAIRPRICE'),
+            const SizedBox(height: 12),
+            if (_chatMessages.isEmpty)
+              const Text('Ask the AI about a counter-offer, buyer objection, quality evidence, or delivery terms.', style: TextStyle(color: AppColors.slate, height: 1.35)),
+            ..._chatMessages.map((message) => Padding(padding: const EdgeInsets.only(bottom: 10), child: ChatBubble(text: message.text, isUser: message.isUser))),
+            _FairPriceComposer(controller: _chatInput, onSend: _sendChat, isThinking: _isChatThinking),
           ],
         ],
       ),
@@ -521,7 +580,7 @@ class _BenchmarkCard extends StatelessWidget {
             const SizedBox(height: 5),
             Text(benchmark.note, style: const TextStyle(color: AppColors.slate, fontSize: 12, height: 1.35)),
             const SizedBox(height: 10),
-            const Text('Indicative in-app reference only — not a live Malaysian market quote.', style: TextStyle(color: AppColors.slate, fontSize: 11, fontWeight: FontWeight.w600)),
+            Text(benchmark.isLiveEvidence ? 'Live Supabase listing evidence — not a guaranteed Malaysian market quote.' : 'No live local benchmark is available — the entered price is only a negotiation anchor.', style: const TextStyle(color: AppColors.slate, fontSize: 11, fontWeight: FontWeight.w600)),
           ],
         ),
       ),
@@ -530,10 +589,12 @@ class _BenchmarkCard extends StatelessWidget {
 }
 
 class _MarketSignalCard extends StatelessWidget {
-  const _MarketSignalCard({required this.commodity, required this.ppi, required this.isLoading});
+  const _MarketSignalCard({required this.commodity, required this.materialIndex, required this.ppi, required this.localListingPrices, required this.isLoading});
 
   final CommodityPriceObservation? commodity;
+  final PriceIndexObservation? materialIndex;
   final PriceIndexObservation? ppi;
+  final List<LocalListingPrice> localListingPrices;
   final bool isLoading;
 
   @override
@@ -557,20 +618,36 @@ class _MarketSignalCard extends StatelessWidget {
               _MarketSignalLine(
                 label: commodity!.seriesName,
                 value: '${commodity!.currency} ${commodity!.value.toStringAsFixed(2)} / ${commodity!.unit.split('/').last}',
-                detail: 'World Bank Pink Sheet · ${_formatMonth(commodity!.observedOn)}',
+                detail: '${commodity!.sourceName} · ${_formatMonth(commodity!.observedOn)}',
               ),
-            if (ppi != null) ...[
+            if (materialIndex != null) ...[
               if (commodity != null) const SizedBox(height: 9),
+              _MarketSignalLine(
+                label: materialIndex!.series,
+                value: '${materialIndex!.indexValue.toStringAsFixed(1)} index points',
+                detail: '${materialIndex!.sourceName} · base ${materialIndex!.baseYear} · ${_formatMonth(materialIndex!.observedOn)}',
+              ),
+            ],
+            if (ppi != null) ...[
+              if (commodity != null || materialIndex != null) const SizedBox(height: 9),
               _MarketSignalLine(
                 label: 'Malaysia PPI',
                 value: '${ppi!.indexValue.toStringAsFixed(1)} index points',
                 detail: 'DOSM · base ${ppi!.baseYear} · ${_formatMonth(ppi!.observedOn)}',
               ),
             ],
-            if (!isLoading && commodity == null && ppi == null)
-              const Text('No external signal is available for this material yet.', style: TextStyle(color: AppColors.slate, height: 1.35)),
+            if (localListingPrices.isNotEmpty) ...[
+              if (commodity != null || materialIndex != null || ppi != null) const SizedBox(height: 9),
+              _MarketSignalLine(
+                label: 'Local marketplace asking prices',
+                value: '${localListingPrices.length} observations',
+                detail: 'Live Supabase listings · used for the negotiation band',
+              ),
+            ],
+            if (!isLoading && commodity == null && materialIndex == null && ppi == null && localListingPrices.isEmpty)
+              const Text('No external or local listing signal is available for this material yet.', style: TextStyle(color: AppColors.slate, height: 1.35)),
             const SizedBox(height: 10),
-            const Text('Context only: global commodity data and the Malaysian PPI are not direct local scrap quotes. Confirm grade, currency, logistics, and counterparty terms before agreeing a price.', style: TextStyle(color: AppColors.slate, fontSize: 11, height: 1.35)),
+            const Text('Context only: indexes and marketplace asking prices are not guaranteed local quotes. Confirm grade, currency, logistics, and counterparty terms before agreeing a price.', style: TextStyle(color: AppColors.slate, fontSize: 11, height: 1.35)),
           ],
         ),
       ),
@@ -605,6 +682,42 @@ class _MarketSignalLine extends StatelessWidget {
         const SizedBox(width: 12),
         Text(value, style: AppTheme.dataStyle.copyWith(fontSize: 13)),
       ],
+    );
+  }
+}
+
+class _FairPriceComposer extends StatelessWidget {
+  const _FairPriceComposer({required this.controller, required this.onSend, required this.isThinking});
+
+  final TextEditingController controller;
+  final VoidCallback onSend;
+  final bool isThinking;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.only(top: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          Expanded(
+            child: TextField(
+              controller: controller,
+              minLines: 1,
+              maxLines: 3,
+              textInputAction: TextInputAction.send,
+              onSubmitted: (_) => onSend(),
+              decoration: const InputDecoration(hintText: 'e.g. The buyer says the material is too wet…'),
+            ),
+          ),
+          const SizedBox(width: 8),
+          IconButton.filled(
+            tooltip: 'Send message to FairPrice',
+            onPressed: isThinking ? null : onSend,
+            icon: isThinking ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.send_outlined),
+          ),
+        ],
+      ),
     );
   }
 }

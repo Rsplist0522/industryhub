@@ -1,10 +1,11 @@
 // M1 SkillMatch AI for IndustryHub.
 // Design intent: turn a plain-language workforce need into a clear, reviewable
-// brief and a transparent shortlist backed by the Supabase catalogue with a curated fallback.
+// brief and a transparent shortlist backed by the live Supabase catalogue.
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../../app/theme.dart';
 import '../../../core/app_state.dart';
@@ -47,7 +48,8 @@ class _ProgramDefinition {
     required this.skills,
     required this.credential,
     required this.summary,
-    this.sourceName = 'IndustryHub curated catalogue',
+    this.sourceName = 'Live Supabase catalogue',
+    this.sourceUrl = '',
   });
 
   final String id;
@@ -59,6 +61,7 @@ class _ProgramDefinition {
   final String credential;
   final String summary;
   final String sourceName;
+  final String sourceUrl;
 }
 
 class _Program {
@@ -72,7 +75,8 @@ class _Program {
     required this.matchedSkills,
     required this.credential,
     required this.summary,
-    this.sourceName = 'IndustryHub curated catalogue',
+    this.sourceName = 'Live Supabase catalogue',
+    this.sourceUrl = '',
   });
 
   final String id;
@@ -85,6 +89,7 @@ class _Program {
   final String credential;
   final String summary;
   final String sourceName;
+  final String sourceUrl;
 }
 
 class _FollowUpPrompt {
@@ -127,58 +132,6 @@ class _SkillMatchScreenState extends ConsumerState<SkillMatchScreen> {
   List<_Program> _programs = const [];
   String _catalogueStatus = 'Submit a workforce need to search the SkillMatch programme catalogue.';
 
-  static const _catalogue = <_ProgramDefinition>[
-    _ProgramDefinition(
-      id: 'cnc-setup',
-      name: 'CNC Programming & Setup',
-      provider: 'Penang Skills Development Centre',
-      level: 'Intermediate',
-      duration: '3 days',
-      skills: ['CNC machining', 'Production planning'],
-      credential: 'Practical setup competency',
-      summary: 'Builds confidence in machine setup, tool offsets, safe operation, and basic programme adjustment.',
-    ),
-    _ProgramDefinition(
-      id: 'lean-essentials',
-      name: 'Lean Manufacturing Essentials',
-      provider: 'Malaysia Productivity Corporation',
-      level: 'Foundation',
-      duration: '2 days',
-      skills: ['Lean manufacturing', 'Production planning'],
-      credential: 'Continuous-improvement toolkit',
-      summary: 'Introduces visual management, waste reduction, and practical improvement routines for production teams.',
-    ),
-    _ProgramDefinition(
-      id: 'quality-systems',
-      name: 'Industrial Quality Systems',
-      provider: 'SIRIM Academy',
-      level: 'Intermediate',
-      duration: '4 days',
-      skills: ['Quality systems', 'Production planning'],
-      credential: 'Quality systems evidence',
-      summary: 'Covers process controls, internal quality checks, traceability, and non-conformance handling.',
-    ),
-    _ProgramDefinition(
-      id: 'welding-safety',
-      name: 'Welding Process & Workplace Safety',
-      provider: 'Skills Training Centre Catalogue',
-      level: 'Foundation',
-      duration: '3 days',
-      skills: ['Welding', 'Occupational safety'],
-      credential: 'Safety and process evidence',
-      summary: 'Supports safe preparation, process discipline, and basic quality checks for welding work.',
-    ),
-    _ProgramDefinition(
-      id: 'supervision',
-      name: 'Production Team Supervision',
-      provider: 'Manufacturing Leadership Catalogue',
-      level: 'Intermediate',
-      duration: '2 days',
-      skills: ['Team supervision', 'Production planning', 'Lean manufacturing'],
-      credential: 'Supervisor action plan',
-      summary: 'Helps emerging supervisors coordinate shifts, coach workers, and manage daily production priorities.',
-    ),
-  ];
 
   @override
   void dispose() {
@@ -360,27 +313,27 @@ class _SkillMatchScreenState extends ConsumerState<SkillMatchScreen> {
 
       if (catalogueProgrammes.isNotEmpty) {
         return _ProgramRanking(
-          programmes: _rankDefinitions(requirement, _catalogue).take(3).toList(),
-          catalogueStatus: 'No catalogue record matches this brief yet. Showing curated suggestions while more programmes are added.',
+          programmes: const [],
+          catalogueStatus: 'No live catalogue record matches this brief yet. Add or refresh programmes in Supabase to see recommendations.',
         );
       }
     } catch (error) {
       debugPrint('SkillMatch Supabase catalogue read failed: $error');
       return _ProgramRanking(
-        programmes: _rankDefinitions(requirement, _catalogue).take(3).toList(),
-        catalogueStatus: 'The Supabase catalogue is unavailable right now. Showing curated suggestions instead.',
+        programmes: const [],
+        catalogueStatus: 'The live Supabase catalogue is unavailable right now. Try again after the data sync is restored.',
       );
     }
 
     return _ProgramRanking(
-      programmes: _rankDefinitions(requirement, _catalogue).take(3).toList(),
-      catalogueStatus: 'No active Supabase programmes found. Showing curated suggestions instead.',
+      programmes: const [],
+      catalogueStatus: 'No active live programmes found. Run the Dart live-data importer to populate Supabase.',
     );
   }
 
   _ProgramDefinition _definitionFromCatalogue(TrainingProgramme programme) {
     final duration = programme.durationDays == 1 ? '1 day' : '${programme.durationDays} days';
-    final sourceSuffix = programme.sourceName.isEmpty ? '' : ' Source: ${programme.sourceName}.';
+        final sourceSuffix = programme.sourceName.isEmpty ? '' : ' Source: ${programme.sourceName}.';
     return _ProgramDefinition(
       id: programme.id,
       name: programme.name,
@@ -391,6 +344,7 @@ class _SkillMatchScreenState extends ConsumerState<SkillMatchScreen> {
       credential: programme.credential.isEmpty ? 'Programme details from the Supabase catalogue' : programme.credential,
       summary: programme.summary.isEmpty ? 'This programme is stored in your Supabase training catalogue.$sourceSuffix' : programme.summary,
       sourceName: programme.sourceName,
+      sourceUrl: programme.sourceUrl,
     );
   }
 
@@ -412,6 +366,7 @@ class _SkillMatchScreenState extends ConsumerState<SkillMatchScreen> {
         credential: definition.credential,
         summary: '${definition.summary} $reason',
         sourceName: definition.sourceName,
+        sourceUrl: definition.sourceUrl,
       );
     }).where((programme) => !onlyMatched || programme.matchedSkills.isNotEmpty).toList()
       ..sort((a, b) => b.match.compareTo(a.match));
@@ -815,7 +770,19 @@ class _ProgramCard extends StatelessWidget {
             ),
             const SizedBox(height: 11),
             Text(programme.summary, style: const TextStyle(color: AppColors.slate, fontSize: 13, height: 1.35)),
-            const SizedBox(height: 10),
+            const SizedBox(height: 11),
+            if (programme.sourceUrl.isNotEmpty)
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton.icon(
+                  onPressed: () {
+                    final uri = Uri.tryParse(programme.sourceUrl);
+                    if (uri != null) launchUrl(uri, mode: LaunchMode.externalApplication);
+                  },
+                  icon: const Icon(Icons.open_in_new, size: 16),
+                  label: const Text('Open live course page'),
+                ),
+              ),
             Row(
               children: [
                 const Icon(Icons.workspace_premium_outlined, size: 16, color: AppColors.slate),

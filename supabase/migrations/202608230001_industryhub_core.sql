@@ -34,6 +34,7 @@ create table if not exists public.listings (
   unit text not null default 'kg',
   location text not null,
   description text not null default '',
+  asking_price_per_kg numeric(18, 4) check (asking_price_per_kg is null or asking_price_per_kg >= 0),
   owner text not null,
   owner_id uuid not null references auth.users(id) on delete cascade,
   verified boolean not null default false,
@@ -146,6 +147,7 @@ alter table public.profiles add column if not exists verified boolean not null d
 alter table public.profiles add column if not exists created_at timestamptz not null default timezone('utc', now());
 alter table public.profiles add column if not exists updated_at timestamptz not null default timezone('utc', now());
 
+alter table public.listings add column if not exists asking_price_per_kg numeric(18, 4);
 alter table public.listings add column if not exists verified boolean not null default false;
 alter table public.listings add column if not exists created_at timestamptz not null default timezone('utc', now());
 alter table public.listings add column if not exists updated_at timestamptz not null default timezone('utc', now());
@@ -190,80 +192,6 @@ for each row execute function public.set_updated_at();
  drop trigger if exists training_programmes_set_updated_at on public.training_programmes;
 create trigger training_programmes_set_updated_at before update on public.training_programmes
 for each row execute function public.set_updated_at();
-
-insert into public.data_sources (id, module_key, name, access_type, source_url, requires_api_key, license, notes, last_verified_at)
-values
-  ('skillmatch-upskill-malaysia', 'skill_match', 'Upskill Malaysia / HRD Corp course catalogue', 'Public catalogue import', 'https://upskillmalaysia.gov.my/', false, null, 'Use as the operator-maintained source for programme catalogue seeding; do not scrape on every mobile launch without a stable export.', '2026-08-23'),
-  ('fairprice-world-bank-pink-sheet', 'fair_price', 'World Bank Commodity Price Data (Pink Sheet)', 'Public XLSX download', 'https://thedocs.worldbank.org/en/doc/5d903e848db1d1b83e0ec8f744e55570-0350012021/related/CMO-Historical-Data-Monthly.xlsx', false, 'World Bank open data terms', 'Global aluminium, copper, and iron ore reference series in USD; use for trend context, not direct RM/kg quotes.', '2026-08-23'),
-  ('fairprice-malaysia-ppi', 'fair_price', 'Malaysia Producer Price Index', 'Public CSV / Open API', 'https://data.gov.my/data-catalogue/ppi', false, 'CC BY 4.0', 'Monthly ex-factory producer-price index from DOSM; recent months may be revised.', '2026-08-23'),
-  ('resource-profile-msic', 'resource_profile', 'Malaysia Standard Industrial Classification 2008', 'Public CSV / Open API', 'https://data.gov.my/data-catalogue/msic', false, 'CC BY 4.0', 'DOSM classification lookup for structured business-sector selection.', '2026-08-23'),
-  ('marketplace-state-industry-context', 'marketplace', 'Malaysia state manufacturing context', 'Public Open API', 'https://api.data.gov.my/data-catalogue?id=gdp_state_real_supply', false, 'CC BY 4.0', 'Contextual state manufacturing activity shown alongside user-generated marketplace listings.', '2026-08-23')
-on conflict (id) do update set
-  name = excluded.name,
-  access_type = excluded.access_type,
-  source_url = excluded.source_url,
-  requires_api_key = excluded.requires_api_key,
-  license = excluded.license,
-  notes = excluded.notes,
-  last_verified_at = excluded.last_verified_at;
-
-insert into public.training_programmes (id, name, provider, skills, level, duration_days, source_name, source_url, credential, summary)
-values
-  ('cnc-setup', 'CNC Programming & Setup', 'Penang Skills Development Centre', '{"CNC machining","Production planning"}', 'Intermediate', 3, 'Upskill Malaysia / HRD Corp', 'https://upskillmalaysia.gov.my/', 'Practical setup competency', 'Builds confidence in machine setup, tool offsets, safe operation, and basic programme adjustment.'),
-  ('lean-essentials', 'Lean Manufacturing Essentials', 'Malaysia Productivity Corporation', '{"Lean manufacturing","Production planning"}', 'Foundation', 2, 'Upskill Malaysia / HRD Corp', 'https://upskillmalaysia.gov.my/', 'Continuous-improvement toolkit', 'Introduces visual management, waste reduction, and practical improvement routines for production teams.'),
-  ('quality-systems', 'Industrial Quality Systems', 'SIRIM Academy', '{"Quality systems","Production planning"}', 'Intermediate', 4, 'Upskill Malaysia / HRD Corp', 'https://upskillmalaysia.gov.my/', 'Quality systems evidence', 'Covers process controls, internal quality checks, traceability, and non-conformance handling.'),
-  ('welding-safety', 'Welding Process & Workplace Safety', 'Skills Training Centre Catalogue', '{"Welding","Occupational safety"}', 'Foundation', 3, 'Upskill Malaysia / HRD Corp', 'https://upskillmalaysia.gov.my/', 'Safety and process evidence', 'Supports safe preparation, process discipline, and basic quality checks for welding work.'),
-  ('supervision', 'Production Team Supervision', 'Manufacturing Leadership Catalogue', '{"Team supervision","Production planning","Lean manufacturing"}', 'Intermediate', 2, 'Upskill Malaysia / HRD Corp', 'https://upskillmalaysia.gov.my/', 'Supervisor action plan', 'Helps emerging supervisors coordinate shifts, coach workers, and manage daily production priorities.')
-on conflict (id) do update set
-  name = excluded.name,
-  provider = excluded.provider,
-  skills = excluded.skills,
-  level = excluded.level,
-  duration_days = excluded.duration_days,
-  source_name = excluded.source_name,
-  source_url = excluded.source_url,
-  credential = excluded.credential,
-  summary = excluded.summary,
-  is_active = true;
-
-insert into public.msic_codes (item_code, digits, section, description_en, description_bm)
-values
-  ('A', 1, 'A', 'Agriculture, forestry and fishing', 'Pertanian, Perhutanan dan Perikanan'),
-  ('B', 1, 'B', 'Mining and quarrying', 'Perlombongan dan Pengkuarian'),
-  ('C', 1, 'C', 'Manufacturing', 'Pembuatan'),
-  ('D', 1, 'D', 'Electricity, gas, steam and air conditioning supply', 'Bekalan elektrik, gas, wap dan pendingin udara'),
-  ('E', 1, 'E', 'Water supply; sewerage, waste management and remediation activities', 'Bekalan air; pembentungan, pengurusan sisa dan aktiviti pemulihan'),
-  ('F', 1, 'F', 'Construction', 'Pembinaan'),
-  ('G', 1, 'G', 'Wholesale and retail trade; repair of motor vehicles and motorcycles', 'Perdagangan borong dan runcit; pembaikan kenderaan bermotor dan motosikal'),
-  ('H', 1, 'H', 'Transportation and storage', 'Pengangkutan dan penyimpanan'),
-  ('J', 1, 'J', 'Information and communication', 'Maklumat dan komunikasi'),
-  ('M', 1, 'M', 'Professional, scientific and technical activities', 'Aktiviti profesional, saintifik dan teknikal'),
-  ('N', 1, 'N', 'Administrative and support service activities', 'Aktiviti pentadbiran dan khidmat sokongan')
-on conflict (item_code) do update set
-  description_en = excluded.description_en,
-  description_bm = excluded.description_bm;
-
-insert into public.commodity_price_observations (source_name, source_url, series_name, observed_on, value, unit, currency, source_updated_at)
-values
-  ('World Bank Commodity Price Data (Pink Sheet)', 'https://thedocs.worldbank.org/en/doc/5d903e848db1d1b83e0ec8f744e55570-0350012021/related/CMO-Historical-Data-Monthly.xlsx', 'Aluminum', '2024-12-01', 2541.02, 'USD/mt', 'USD', '2025-01-03'),
-  ('World Bank Commodity Price Data (Pink Sheet)', 'https://thedocs.worldbank.org/en/doc/5d903e848db1d1b83e0ec8f744e55570-0350012021/related/CMO-Historical-Data-Monthly.xlsx', 'Copper', '2024-12-01', 8916.32, 'USD/mt', 'USD', '2025-01-03'),
-  ('World Bank Commodity Price Data (Pink Sheet)', 'https://thedocs.worldbank.org/en/doc/5d903e848db1d1b83e0ec8f744e55570-0350012021/related/CMO-Historical-Data-Monthly.xlsx', 'Iron ore, cfr spot', '2024-12-01', 102.21, 'USD/dmtu', 'USD', '2025-01-03')
-on conflict (source_name, series_name, observed_on) do update set
-  value = excluded.value,
-  unit = excluded.unit,
-  source_updated_at = excluded.source_updated_at;
-
-insert into public.price_index_observations (source_name, source_url, dataset_id, series, observed_on, index_value, base_year)
-values
-  ('Department of Statistics Malaysia', 'https://data.gov.my/data-catalogue/ppi', 'ppi', 'abs', '2026-06-01', 125.6, 2010)
-on conflict (dataset_id, series, observed_on) do update set
-  index_value = excluded.index_value;
-
-insert into public.industry_context_observations (source_name, source_url, state, sector, series, observed_on, value)
-values
-  ('Department of Statistics Malaysia', 'https://api.data.gov.my/data-catalogue?id=gdp_state_real_supply', 'Pulau Pinang', 'p3', 'abs', '2025-01-01', 61658.978)
-on conflict (state, sector, series, observed_on) do update set
-  value = excluded.value;
 
 alter table public.profiles enable row level security;
 alter table public.listings enable row level security;

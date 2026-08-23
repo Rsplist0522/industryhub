@@ -40,7 +40,7 @@ For another OpenAI-compatible provider, replace `AI_BASE_URL` and `AI_MODEL` wit
 
 ## Data expectations
 
-The active client-side repositories use `profiles`, `listings`, `deal_requests`, `training_programmes`, `msic_codes`, `data_sources`, `commodity_price_observations`, `price_index_observations`, and `industry_context_observations`. You do **not** need to create these tables one by one: the repository includes a complete migration at `supabase/migrations/202608230001_industryhub_core.sql` with starter datasets, indexes, triggers, and Row Level Security policies.
+The active client-side repositories use `profiles`, `listings`, `deal_requests`, `training_programmes`, `msic_codes`, `data_sources`, `commodity_price_observations`, `price_index_observations`, and `industry_context_observations`. You do **not** need to create these tables one by one: the repository includes a schema-only migration at `supabase/migrations/202608230001_industryhub_core.sql` with indexes, triggers, and Row Level Security policies. It intentionally contains no hardcoded dataset inserts.
 
 If you have the Supabase CLI installed and have linked the project, run:
 
@@ -50,7 +50,24 @@ supabase link --project-ref YOUR_PROJECT_REF
 supabase db push
 ```
 
-Alternatively, open your Supabase SQL Editor, paste the contents of the migration file, and run it once. The migration uses `create table if not exists` and upserts for seed rows, so it is designed to be safe for a compatible existing schema. If your existing tables use different required column names or types, review those differences before running it.
+Alternatively, open your Supabase SQL Editor, paste and run these migration files in order:
+
+```text
+supabase/migrations/202608230001_industryhub_core.sql
+supabase/migrations/202608240002_remove_legacy_seeds.sql
+```
+
+The second migration removes only the known demo rows from the previous version; it does not remove user-created listings or profiles. After the schema and cleanup exist, use the Dart-only live importer:
+
+```bash
+# Verify public sources without writing anything
+SUPABASE_URL=https://your-project.supabase.co dart run scripts/ingest_live_data.dart --dry-run --course-query "software engineering"
+
+# Write live records to Supabase using a server-only service key
+SUPABASE_URL=https://your-project.supabase.co SUPABASE_SERVICE_ROLE_KEY=your-service-role-key dart run scripts/ingest_live_data.dart --course-query "software engineering"
+```
+
+The importer crawls the public Coursera search page for real course URLs, reads DOSM MSIC and PPI data, and reads public FRED metal-index CSVs. Keep `SUPABASE_SERVICE_ROLE_KEY` out of the Flutter app and out of Git. If a public source is temporarily unavailable, the importer reports the failed source instead of inserting fake seed data. If your existing tables use different required column names or types, review those differences before running the migrations. Re-run the importer whenever you want to refresh live records; the app itself does not invent replacement courses or price observations when the tables are empty.
 
 For production use, review the included Row Level Security policies and enable anonymous authentication only for a controlled demo. The current bootstrap uses anonymous Supabase authentication for the demo workspace; the readiness label is not formal government or third-party verification.
 
@@ -67,4 +84,4 @@ flutter analyze
 flutter test
 ```
 
-The supplied sandbox did not include the Flutter SDK, so those commands could not be executed during this enhancement pass. Source-level checks were completed with `git diff --check` and repository-wide reference scans.
+The Flutter analyzer and widget tests pass in the development environment. The Dart importer also supports a dry run so public-source retrieval can be verified without writing to Supabase.
