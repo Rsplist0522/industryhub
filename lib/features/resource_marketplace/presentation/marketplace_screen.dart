@@ -289,7 +289,7 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
           ],
           const SizedBox(height: 16),
           DropdownButtonFormField<String>(
-            value: _selectedOfficialContextState,
+            initialValue: _selectedOfficialContextState,
             isExpanded: true,
             decoration: const InputDecoration(
               labelText: 'Official data region',
@@ -602,7 +602,7 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
                   const Text('Use the filters below to focus on a viable supply or demand match.', style: TextStyle(color: AppColors.slate, height: 1.35)),
                   const SizedBox(height: 20),
                   DropdownButtonFormField<String>(
-                    value: draftMaterial ?? 'all',
+                    initialValue: draftMaterial ?? 'all',
                     decoration: const InputDecoration(labelText: 'Material'),
                     items: [
                       const DropdownMenuItem(value: 'all', child: Text('Any material')),
@@ -612,7 +612,7 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
                   ),
                   const SizedBox(height: 14),
                   DropdownButtonFormField<String>(
-                    value: draftLocation ?? 'all',
+                    initialValue: draftLocation ?? 'all',
                     decoration: const InputDecoration(labelText: 'Location'),
                     items: [
                       const DropdownMenuItem(value: 'all', child: Text('Any location')),
@@ -705,7 +705,7 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
             children: [
               Text('Transaction history', style: Theme.of(sheetContext).textTheme.titleLarge),
               const SizedBox(height: 4),
-              const Text('Outgoing deal requests saved to your Firestore account.', style: TextStyle(color: AppColors.slate)),
+              const Text('Outgoing deal requests saved to your Supabase workspace.', style: TextStyle(color: AppColors.slate)),
               const SizedBox(height: 14),
               if (_isLoadingHistory)
                 const Center(child: Padding(padding: EdgeInsets.all(20), child: CircularProgressIndicator()))
@@ -1005,7 +1005,7 @@ class _RequestStatus extends StatelessWidget {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(color: AppColors.green.withOpacity(0.10), borderRadius: BorderRadius.circular(8)),
+      decoration: BoxDecoration(color: AppColors.green.withValues(alpha: 0.10), borderRadius: BorderRadius.circular(8)),
       child: const Row(
         children: [
           Icon(Icons.check_circle_outline, color: AppColors.green),
@@ -1046,7 +1046,7 @@ class _SavedSearchBanner extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(color: AppColors.green.withOpacity(0.08), border: Border.all(color: AppColors.green.withOpacity(0.25)), borderRadius: BorderRadius.circular(8)),
+      decoration: BoxDecoration(color: AppColors.green.withValues(alpha: 0.08), border: Border.all(color: AppColors.green.withValues(alpha: 0.25)), borderRadius: BorderRadius.circular(8)),
       child: Row(
         children: [
           const Icon(Icons.bookmark_added_outlined, color: AppColors.green, size: 18),

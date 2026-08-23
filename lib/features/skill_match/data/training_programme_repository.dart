@@ -1,11 +1,10 @@
 // Supabase access for the curated IndustryHub SkillMatch programme catalogue.
-// The legacy model name is retained temporarily so the existing SkillMatch
-// presentation file does not require a UI rewrite during backend migration.
+// Supabase-backed training programme records used by SkillMatch.
 
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-class FirestoreTrainingProgramme {
-  const FirestoreTrainingProgramme({
+class TrainingProgramme {
+  const TrainingProgramme({
     required this.id,
     required this.name,
     required this.provider,
@@ -29,10 +28,10 @@ class FirestoreTrainingProgramme {
   final String credential;
   final String summary;
 
-  factory FirestoreTrainingProgramme.fromSupabase(Map<String, dynamic> data) {
+  factory TrainingProgramme.fromSupabase(Map<String, dynamic> data) {
     final rawSkills = data['skills'];
     final rawDuration = data['duration_days'] ?? data['durationDays'];
-    return FirestoreTrainingProgramme(
+    return TrainingProgramme(
       id: data['id'] as String? ?? '',
       name: data['name'] as String? ?? data['title'] as String? ?? 'Unnamed programme',
       provider: data['provider'] as String? ?? 'Unspecified provider',
@@ -52,10 +51,10 @@ class TrainingProgrammeRepository {
 
   final SupabaseClient _supabase;
 
-  Future<List<FirestoreTrainingProgramme>> fetchActiveProgrammes() async {
+  Future<List<TrainingProgramme>> fetchActiveProgrammes() async {
     final rows = await _supabase.from('training_programmes').select().eq('is_active', true);
     return (rows as List)
-        .map((row) => FirestoreTrainingProgramme.fromSupabase(Map<String, dynamic>.from(row as Map)))
+        .map((row) => TrainingProgramme.fromSupabase(Map<String, dynamic>.from(row as Map)))
         .toList();
   }
 }

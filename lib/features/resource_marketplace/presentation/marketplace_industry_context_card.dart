@@ -28,7 +28,7 @@ class MarketplaceIndustryContextCard extends StatelessWidget {
     final data = this.context;
 
     return Card(
-      color: AppColors.green.withOpacity(0.07),
+      color: AppColors.green.withValues(alpha: 0.07),
       child: Padding(
         padding: const EdgeInsets.all(14),
         child: Column(
