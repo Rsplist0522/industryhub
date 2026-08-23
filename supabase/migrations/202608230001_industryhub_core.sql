@@ -140,6 +140,20 @@ create table if not exists public.industry_context_observations (
   unique (state, sector, series, observed_on)
 );
 
+create table if not exists public.workforce_skill_signals (
+  id uuid primary key default gen_random_uuid(),
+  source_name text not null,
+  source_url text not null,
+  dataset_id text not null,
+  variable text not null,
+  age_group text not null,
+  observed_on date not null,
+  signal_value numeric(18, 6) not null,
+  unit text not null,
+  created_at timestamptz not null default timezone('utc', now()),
+  unique (dataset_id, variable, age_group, observed_on)
+);
+
 -- Keep an existing compatible schema usable when this migration is added later.
 alter table public.profiles add column if not exists msic_code text;
 alter table public.profiles add column if not exists msic_description text;
@@ -176,6 +190,7 @@ create index if not exists training_programmes_active_idx on public.training_pro
 create index if not exists msic_codes_description_idx on public.msic_codes using gin (to_tsvector('simple', description_en));
 create index if not exists commodity_price_series_idx on public.commodity_price_observations(series_name, observed_on desc);
 create index if not exists industry_context_state_idx on public.industry_context_observations(state, observed_on desc);
+create index if not exists workforce_skill_signals_latest_idx on public.workforce_skill_signals(observed_on desc, variable);
 
  drop trigger if exists profiles_set_updated_at on public.profiles;
 create trigger profiles_set_updated_at before update on public.profiles
@@ -202,6 +217,7 @@ alter table public.data_sources enable row level security;
 alter table public.commodity_price_observations enable row level security;
 alter table public.price_index_observations enable row level security;
 alter table public.industry_context_observations enable row level security;
+alter table public.workforce_skill_signals enable row level security;
 
 drop policy if exists profiles_select_own on public.profiles;
 create policy profiles_select_own on public.profiles for select to authenticated using (auth.uid() = user_id);
@@ -236,3 +252,5 @@ drop policy if exists price_index_observations_select_authenticated on public.pr
 create policy price_index_observations_select_authenticated on public.price_index_observations for select to authenticated using (true);
 drop policy if exists industry_context_observations_select_authenticated on public.industry_context_observations;
 create policy industry_context_observations_select_authenticated on public.industry_context_observations for select to authenticated using (true);
+drop policy if exists workforce_skill_signals_select_authenticated on public.workforce_skill_signals;
+create policy workforce_skill_signals_select_authenticated on public.workforce_skill_signals for select to authenticated using (true);
