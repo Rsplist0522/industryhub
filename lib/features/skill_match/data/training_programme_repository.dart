@@ -1,5 +1,5 @@
-// Supabase access for the curated IndustryHub SkillMatch programme catalogue.
-// Supabase-backed training programme records used by SkillMatch.
+// Supabase access for the live IndustryHub SkillMatch programme catalogue.
+// Records are populated from the Dart live-data importer and ranked by SkillMatch.
 
 import 'package:supabase_flutter/supabase_flutter.dart';
 

@@ -452,6 +452,8 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
               const SizedBox(height: 14),
               _DetailLine(label: 'Business', value: listing.owner),
               _DetailLine(label: 'Quantity', value: '${listing.quantity.toStringAsFixed(0)} ${listing.unit}'),
+              if (listing.askingPricePerKg != null)
+                _DetailLine(label: 'Asking price', value: 'RM ${listing.askingPricePerKg!.toStringAsFixed(2)}/kg'),
               _DetailLine(label: 'Location', value: listing.location),
               _DetailLine(label: 'Description', value: listing.description),
               if (listing.verified) const _DetailLine(label: 'Trust status', value: 'Verified ReSource business'),
