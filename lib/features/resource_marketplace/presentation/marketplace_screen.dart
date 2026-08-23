@@ -705,7 +705,7 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
             children: [
               Text('Transaction history', style: Theme.of(sheetContext).textTheme.titleLarge),
               const SizedBox(height: 4),
-              const Text('Outgoing deal requests saved to your Firestore account.', style: TextStyle(color: AppColors.slate)),
+              const Text('Outgoing deal requests saved to your Supabase workspace.', style: TextStyle(color: AppColors.slate)),
               const SizedBox(height: 14),
               if (_isLoadingHistory)
                 const Center(child: Padding(padding: EdgeInsets.all(20), child: CircularProgressIndicator()))

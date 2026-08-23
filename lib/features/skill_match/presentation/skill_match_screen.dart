@@ -1,6 +1,6 @@
 // M1 SkillMatch AI for IndustryHub.
 // Design intent: turn a plain-language workforce need into a clear, reviewable
-// brief and a transparent local programme shortlist for the assignment prototype.
+// brief and a transparent shortlist backed by the Supabase catalogue with a curated fallback.
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -283,38 +283,38 @@ class _SkillMatchScreenState extends ConsumerState<SkillMatchScreen> {
 
   Future<_ProgramRanking> _rankProgrammes(_Requirement requirement) async {
     try {
-      final firestoreProgrammes = await _trainingProgrammeRepository.fetchActiveProgrammes();
-      final firestoreDefinitions = firestoreProgrammes.map(_definitionFromFirestore).toList();
-      final firestoreMatches = _rankDefinitions(requirement, firestoreDefinitions, onlyMatched: true);
+      final catalogueProgrammes = await _trainingProgrammeRepository.fetchActiveProgrammes();
+      final catalogueDefinitions = catalogueProgrammes.map(_definitionFromCatalogue).toList();
+      final catalogueMatches = _rankDefinitions(requirement, catalogueDefinitions, onlyMatched: true);
 
-      if (firestoreMatches.isNotEmpty) {
+      if (catalogueMatches.isNotEmpty) {
         return _ProgramRanking(
-          programmes: firestoreMatches.take(3).toList(),
-          catalogueStatus: 'Showing ${firestoreMatches.length} matching programme record${firestoreMatches.length == 1 ? '' : 's'} from your Firestore catalogue.',
+          programmes: catalogueMatches.take(3).toList(),
+          catalogueStatus: 'Showing ${catalogueMatches.length} matching programme record${catalogueMatches.length == 1 ? '' : 's'} from the Supabase catalogue.',
         );
       }
 
-      if (firestoreProgrammes.isNotEmpty) {
+      if (catalogueProgrammes.isNotEmpty) {
         return _ProgramRanking(
           programmes: _rankDefinitions(requirement, _catalogue).take(3).toList(),
-          catalogueStatus: 'No Firestore record matches this brief yet. Showing local prototype suggestions while you add more catalogue records.',
+          catalogueStatus: 'No catalogue record matches this brief yet. Showing curated suggestions while more programmes are added.',
         );
       }
     } catch (error) {
-      debugPrint('SkillMatch Firestore catalogue read failed: $error');
+      debugPrint('SkillMatch Supabase catalogue read failed: $error');
       return _ProgramRanking(
         programmes: _rankDefinitions(requirement, _catalogue).take(3).toList(),
-        catalogueStatus: 'Firestore is unavailable right now. Showing local prototype suggestions.',
+        catalogueStatus: 'The Supabase catalogue is unavailable right now. Showing curated suggestions instead.',
       );
     }
 
     return _ProgramRanking(
       programmes: _rankDefinitions(requirement, _catalogue).take(3).toList(),
-      catalogueStatus: 'No active Firestore programmes found. Showing local prototype suggestions.',
+      catalogueStatus: 'No active Supabase programmes found. Showing curated suggestions instead.',
     );
   }
 
-  _ProgramDefinition _definitionFromFirestore(FirestoreTrainingProgramme programme) {
+  _ProgramDefinition _definitionFromCatalogue(TrainingProgramme programme) {
     final duration = programme.durationDays == 1 ? '1 day' : '${programme.durationDays} days';
     final sourceSuffix = programme.sourceName.isEmpty ? '' : ' Source: ${programme.sourceName}.';
     return _ProgramDefinition(
@@ -324,8 +324,8 @@ class _SkillMatchScreenState extends ConsumerState<SkillMatchScreen> {
       level: programme.level,
       duration: programme.durationDays > 0 ? duration : 'Duration to be confirmed',
       skills: programme.skills,
-      credential: programme.credential.isEmpty ? 'Programme details from Firestore catalogue' : programme.credential,
-      summary: programme.summary.isEmpty ? 'This programme is stored in your Firestore training catalogue.$sourceSuffix' : programme.summary,
+      credential: programme.credential.isEmpty ? 'Programme details from the Supabase catalogue' : programme.credential,
+      summary: programme.summary.isEmpty ? 'This programme is stored in your Supabase training catalogue.$sourceSuffix' : programme.summary,
     );
   }
 

@@ -1,4 +1,5 @@
 import 'dart:convert';
+
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:http/http.dart' as http;
 
@@ -42,14 +43,5 @@ class AiService {
       'experience_level': 'Entry to intermediate',
       'certifications': ['HRD Corp claimable preferred'],
     };
-  }
-}
-
-class FirebaseService {
-  const FirebaseService();
-
-  Future<void> initialize() async {
-    // Add Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform)
-    // after running `flutterfire configure` for the target project.
   }
 }

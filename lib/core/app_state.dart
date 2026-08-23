@@ -1,6 +1,6 @@
 // Supabase-backed application state for IndustryHub.
-// Replaces the previous Firebase/Firestore persistence layer while keeping
-// the existing Profile and Marketplace screen interfaces unchanged.
+// Profile and marketplace records are scoped to the signed-in workspace while
+// the UI continues to expose simple immutable models.
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -142,6 +142,7 @@ class IndustryHubNotifier extends Notifier<IndustryHubState> {
   }
 
   Future<void> _loadProfileAndListings() async {
+    if (!_disposed) state = state.copyWith(isLoading: true);
     try {
       final user = await _ensureSignedInUser();
       if (user == null) {

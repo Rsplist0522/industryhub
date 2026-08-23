@@ -1,5 +1,5 @@
 // M2 FairPrice for IndustryHub.
-// Design intent: a transparent prototype negotiation simulator with explicit
+// Design intent: a transparent negotiation simulator with explicit
 // inputs, explainable reference adjustments, and no claim of live market pricing.
 
 import 'package:flutter/material.dart';
@@ -98,7 +98,7 @@ class _FairPriceScreenState extends ConsumerState<FairPriceScreen> {
       _messages
         ..clear()
         ..add(
-          'Round 1 / Reference check: ${result.benchmark.label} is using a local prototype reference of RM ${result.benchmark.low.toStringAsFixed(2)}–${result.benchmark.high.toStringAsFixed(2)}/kg. Your offer is RM ${proposedPrice.toStringAsFixed(2)}/kg for ${quantity.toStringAsFixed(0)} kg.',
+          'Round 1 / Reference check: ${result.benchmark.label} is using an indicative in-app reference of RM ${result.benchmark.low.toStringAsFixed(2)}–${result.benchmark.high.toStringAsFixed(2)}/kg. Your offer is RM ${proposedPrice.toStringAsFixed(2)}/kg for ${quantity.toStringAsFixed(0)} kg.',
         );
     });
 
@@ -140,7 +140,7 @@ class _FairPriceScreenState extends ConsumerState<FairPriceScreen> {
       ceiling += 0.50;
       adjustments.add('Smaller volume supports a slightly higher handling allowance.');
     } else {
-      adjustments.add('The quoted volume sits within the prototype reference band.');
+      adjustments.add('The quoted volume sits within the indicative reference band.');
     }
 
     switch (_condition) {
@@ -191,7 +191,7 @@ class _FairPriceScreenState extends ConsumerState<FairPriceScreen> {
     final lower = product.toLowerCase();
     if (lower.contains('copper')) {
       return const _Benchmark(
-        label: 'Copper-bearing material / prototype reference',
+        label: 'Copper-bearing material / indicative reference',
         low: 24.00,
         high: 32.00,
         note: 'Use only as a demonstration reference; cable grade and contamination materially change value.',
@@ -199,7 +199,7 @@ class _FairPriceScreenState extends ConsumerState<FairPriceScreen> {
     }
     if (lower.contains('steel') || lower.contains('iron')) {
       return const _Benchmark(
-        label: 'Ferrous offcuts / prototype reference',
+        label: 'Ferrous offcuts / indicative reference',
         low: 0.90,
         high: 1.70,
         note: 'Use only as a demonstration reference; grade, preparation, and collection costs matter.',
@@ -207,7 +207,7 @@ class _FairPriceScreenState extends ConsumerState<FairPriceScreen> {
     }
     if (lower.contains('plastic') || lower.contains('polymer')) {
       return const _Benchmark(
-        label: 'Recyclable plastic / prototype reference',
+        label: 'Recyclable plastic / indicative reference',
         low: 0.70,
         high: 1.40,
         note: 'Use only as a demonstration reference; resin type and contamination materially change value.',
@@ -215,14 +215,14 @@ class _FairPriceScreenState extends ConsumerState<FairPriceScreen> {
     }
     if (lower.contains('aluminium') || lower.contains('aluminum')) {
       return const _Benchmark(
-        label: 'Aluminium machining offcuts / prototype reference',
+        label: 'Aluminium machining offcuts / indicative reference',
         low: 42.00,
         high: 55.00,
         note: 'Use only as a demonstration reference; alloy, moisture, and collection terms change value.',
       );
     }
     return const _Benchmark(
-      label: 'General industrial material / prototype reference',
+      label: 'General industrial material / indicative reference',
       low: 18.00,
       high: 28.00,
       note: 'Use only as a demonstration reference until an approved material-specific benchmark is connected.',
@@ -300,7 +300,7 @@ class _FairPriceScreenState extends ConsumerState<FairPriceScreen> {
           const PageIntro(
             eyebrow: 'M2 / FAIRPRICE',
             title: 'Measure before you negotiate.',
-            description: 'Give the simulator a product, volume, offer, and trade terms. It pressure-tests the offer against a transparent prototype reference.',
+            description: 'Give the simulator a product, volume, offer, and trade terms. It pressure-tests the offer against a transparent indicative reference.',
           ),
           const SizedBox(height: 22),
           Form(
@@ -369,7 +369,7 @@ class _FairPriceScreenState extends ConsumerState<FairPriceScreen> {
             ),
           ),
           const SizedBox(height: 24),
-          const SpecDivider(label: 'PROTOTYPE REFERENCE'),
+          const SpecDivider(label: 'INDICATIVE REFERENCE'),
           const SizedBox(height: 14),
           _BenchmarkCard(benchmark: previewBenchmark),
           if (_messages.isNotEmpty) ...[

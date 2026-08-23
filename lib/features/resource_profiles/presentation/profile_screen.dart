@@ -1,6 +1,6 @@
 // M3 ReSource Profile for IndustryHub.
-// Design intent: provide a clear, trustworthy business identity and safe local
-// listing management while keeping data shapes ready for later Firestore storage.
+// Design intent: provide a clear, trustworthy business identity and safe listing
+// management backed by the signed-in user's Supabase workspace.
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -85,7 +85,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     ],
                   ),
                   const SizedBox(height: 8),
-                  const Text('This prototype status means your profile has the information needed for a review. It is not an automatic government or third-party verification.', style: TextStyle(color: AppColors.slate, fontSize: 12, height: 1.35)),
+                  const Text('This readiness status means your profile has the information needed for a review. It is not an automatic government or third-party verification.', style: TextStyle(color: AppColors.slate, fontSize: 12, height: 1.35)),
                   const SizedBox(height: 16),
                   if (_editing)
                     _ProfileEditor(
@@ -115,7 +115,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             ],
           ),
           const SizedBox(height: 4),
-          Text('${ownListings.length} active listing${ownListings.length == 1 ? '' : 's'} shown in your local prototype session.', style: const TextStyle(color: AppColors.slate, fontSize: 12)),
+          Text('${ownListings.length} active listing${ownListings.length == 1 ? '' : 's'} stored in your Supabase workspace.', style: const TextStyle(color: AppColors.slate, fontSize: 12)),
           const SizedBox(height: 10),
           if (ownListings.isEmpty)
             _ProfileEmptyState(onAddListing: () => _showAddListing(context))
@@ -134,7 +134,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           const _ChecklistRow(label: 'Profile ready for review', complete: true),
           _ChecklistRow(label: 'First marketplace listing', complete: hasListings),
           const SizedBox(height: 8),
-          const Text('Later, profile fields and listings can be stored under the signed-in user in Firestore. They are currently held in local app state for the assignment prototype.', style: TextStyle(color: AppColors.slate, fontSize: 12, height: 1.35)),
+          const Text('Business details and listings are stored under your anonymous Supabase workspace. Add a verified identity workflow before treating this readiness status as formal verification.', style: TextStyle(color: AppColors.slate, fontSize: 12, height: 1.35)),
         ],
       ),
     );
@@ -166,8 +166,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     setState(() => _editing = false);
 
     final message = hasListings && businessName != originalBusinessName
-        ? 'Profile saved. Existing local listings keep their original owner name until Firestore syncing is added.'
-        : 'Profile saved for this session.';
+        ? 'Profile saved. Existing listings were updated with the new business name.'
+        : 'Profile saved to your workspace.';
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
   }
 
@@ -191,7 +191,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Text('This listing will appear in ReSource Marketplace during the current prototype session.', style: TextStyle(color: AppColors.slate, fontSize: 12, height: 1.35)),
+                  const Text('This listing will be saved to your Supabase workspace and shown in ReSource Marketplace.', style: TextStyle(color: AppColors.slate, fontSize: 12, height: 1.35)),
                   const SizedBox(height: 14),
                   DropdownButtonFormField<String>(
                     value: type,
@@ -289,7 +289,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: const Text('Remove this listing?'),
-        content: Text('${listing.material} will no longer appear in ReSource Marketplace during this prototype session.'),
+        content: Text('${listing.material} will be removed from your Supabase workspace and no longer appear in ReSource Marketplace.'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Keep listing')),
           FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('Remove listing')),
@@ -299,7 +299,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
 
     if (shouldRemove != true || !mounted) return;
     ref.read(appStateProvider.notifier).removeListing(listing.id);
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Listing removed from the prototype marketplace.')));
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Listing removed from ReSource Marketplace.')));
   }
 
   String? _requiredText(String? value) => value == null || value.trim().isEmpty ? 'This field is required.' : null;
