@@ -34,14 +34,19 @@ AI_MODEL=your-model-name
 
 ## Data expectations
 
-The active client-side repositories expect these Supabase tables:
+The active client-side repositories use `profiles`, `listings`, `deal_requests`, `training_programmes`, `msic_codes`, `data_sources`, `commodity_price_observations`, `price_index_observations`, and `industry_context_observations`. You do **not** need to create these tables one by one: the repository includes a complete migration at `supabase/migrations/202608230001_industryhub_core.sql` with starter datasets, indexes, triggers, and Row Level Security policies.
 
-- `profiles`, keyed by `user_id`, with `business_name`, `sector`, `role`, and optional `verified` fields.
-- `listings`, with `type`, `material`, `quantity`, `unit`, `location`, `description`, `owner`, `owner_id`, and optional `verified` fields.
-- `training_programmes`, with `is_active`, `name`, `provider`, `skills`, `level`, `duration_days`, `source_name`, `source_url`, `credential`, and `summary` fields.
-- The deal-request repository contains the request schema used by Marketplace history and submission flows.
+If you have the Supabase CLI installed and have linked the project, run:
 
-For production use, configure Supabase Row Level Security so profiles, listings, and requests are scoped to the authenticated workspace. The current bootstrap uses anonymous Supabase authentication for the demo workspace; the readiness label is not formal government or third-party verification.
+```bash
+supabase login
+supabase link --project-ref YOUR_PROJECT_REF
+supabase db push
+```
+
+Alternatively, open your Supabase SQL Editor, paste the contents of the migration file, and run it once. The migration uses `create table if not exists` and upserts for seed rows, so it is designed to be safe for a compatible existing schema. If your existing tables use different required column names or types, review those differences before running it.
+
+For production use, review the included Row Level Security policies and enable anonymous authentication only for a controlled demo. The current bootstrap uses anonymous Supabase authentication for the demo workspace; the readiness label is not formal government or third-party verification.
 
 ## Design direction
 

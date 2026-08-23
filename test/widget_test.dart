@@ -17,6 +17,7 @@ void main() {
     expect(find.text('INDUSTRYHUB'), findsOneWidget);
 
     await tester.pump(const Duration(milliseconds: 950));
+    await tester.pumpAndSettle();
     expect(find.text('Welcome back.'), findsOneWidget);
   });
 }

@@ -67,25 +67,33 @@ class CompanyProfile {
     this.sector = 'Precision manufacturing',
     this.role = 'Factory owner',
     this.verified = false,
+    this.msicCode,
+    this.msicDescription,
   });
 
   final String businessName;
   final String sector;
   final String role;
   final bool verified;
+  final String? msicCode;
+  final String? msicDescription;
 
   factory CompanyProfile.fromSupabase(Map<String, dynamic> data) => CompanyProfile(
         businessName: data['business_name'] as String? ?? 'Kencana Precision Works',
         sector: data['sector'] as String? ?? 'Precision manufacturing',
         role: data['role'] as String? ?? 'Factory owner',
         verified: data['verified'] as bool? ?? false,
+        msicCode: data['msic_code'] as String?,
+        msicDescription: data['msic_description'] as String?,
       );
 
-  CompanyProfile copyWith({String? businessName, String? sector, String? role, bool? verified}) => CompanyProfile(
+  CompanyProfile copyWith({String? businessName, String? sector, String? role, bool? verified, String? msicCode, String? msicDescription}) => CompanyProfile(
         businessName: businessName ?? this.businessName,
         sector: sector ?? this.sector,
         role: role ?? this.role,
         verified: verified ?? this.verified,
+        msicCode: msicCode ?? this.msicCode,
+        msicDescription: msicDescription ?? this.msicDescription,
       );
 }
 
@@ -177,7 +185,7 @@ class IndustryHubNotifier extends Notifier<IndustryHubState> {
 
   Future<void> refreshSupabaseData() => _loadProfileAndListings();
 
-  Future<void> updateProfile({String? businessName, String? sector, String? role}) async {
+  Future<void> updateProfile({String? businessName, String? sector, String? role, String? msicCode, String? msicDescription}) async {
     final user = await _ensureSignedInUser();
     if (user == null) return;
 
@@ -185,6 +193,8 @@ class IndustryHubNotifier extends Notifier<IndustryHubState> {
       businessName: businessName?.trim().isNotEmpty == true ? businessName!.trim() : null,
       sector: sector?.trim().isNotEmpty == true ? sector!.trim() : null,
       role: role?.trim().isNotEmpty == true ? role!.trim() : null,
+      msicCode: msicCode?.trim().isNotEmpty == true ? msicCode!.trim() : null,
+      msicDescription: msicDescription?.trim().isNotEmpty == true ? msicDescription!.trim() : null,
     );
 
     try {
@@ -192,6 +202,8 @@ class IndustryHubNotifier extends Notifier<IndustryHubState> {
         'business_name': updatedProfile.businessName,
         'sector': updatedProfile.sector,
         'role': updatedProfile.role,
+        'msic_code': updatedProfile.msicCode,
+        'msic_description': updatedProfile.msicDescription,
       }).eq('user_id', user.id);
 
       var updatedListings = state.listings;

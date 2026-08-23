@@ -9,6 +9,7 @@ import 'package:go_router/go_router.dart';
 import '../../../app/theme.dart';
 import '../../../core/app_state.dart';
 import '../../../core/widgets.dart';
+import '../data/msic_repository.dart';
 
 class ProfileScreen extends ConsumerStatefulWidget {
   const ProfileScreen({super.key});
@@ -22,6 +23,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   bool _editing = false;
   late final TextEditingController _business;
   late final TextEditingController _sector;
+  final _msicRepository = MsicRepository();
+  List<IndustrySector> _industrySectors = const [];
+  bool _isLoadingIndustrySectors = true;
 
   @override
   void initState() {
@@ -29,6 +33,22 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     final profile = ref.read(appStateProvider).profile;
     _business = TextEditingController(text: profile.businessName);
     _sector = TextEditingController(text: profile.sector);
+    Future<void>.microtask(_loadIndustrySectors);
+  }
+
+  Future<void> _loadIndustrySectors() async {
+    try {
+      final sectors = await _msicRepository.fetchTopLevelSectors();
+      if (!mounted) return;
+      setState(() {
+        _industrySectors = sectors;
+        _isLoadingIndustrySectors = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _isLoadingIndustrySectors = false);
+      debugPrint('MSIC sector catalogue could not be loaded: $error');
+    }
   }
 
   @override
@@ -92,11 +112,16 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       formKey: _profileFormKey,
                       business: _business,
                       sector: _sector,
+                      sectors: _industrySectors,
+                      isLoadingSectors: _isLoadingIndustrySectors,
+                      onRefreshSectors: _loadIndustrySectors,
                       onCancel: _cancelEditing,
                       onSave: () => _saveProfile(profile.businessName, ownListings.isNotEmpty),
                     )
                   else ...[
                     _ProfileLine(label: 'Sector', value: profile.sector),
+                    if (profile.msicCode != null)
+                      _ProfileLine(label: 'MSIC code', value: '${profile.msicCode} · ${profile.msicDescription ?? profile.sector}'),
                     _ProfileLine(label: 'Account role', value: profile.role),
                     const _ProfileLine(label: 'Review status', value: 'Ready for business review'),
                     const SizedBox(height: 8),
@@ -161,8 +186,20 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     if (!(_profileFormKey.currentState?.validate() ?? false)) return;
     final businessName = _business.text.trim();
     final sector = _sector.text.trim();
+    IndustrySector? selectedSector;
+    for (final candidate in _industrySectors) {
+      if (candidate.name == sector) {
+        selectedSector = candidate;
+        break;
+      }
+    }
 
-    ref.read(appStateProvider.notifier).updateProfile(businessName: businessName, sector: sector);
+    ref.read(appStateProvider.notifier).updateProfile(
+          businessName: businessName,
+          sector: sector,
+          msicCode: selectedSector?.code,
+          msicDescription: selectedSector?.name,
+        );
     setState(() => _editing = false);
 
     final message = hasListings && businessName != originalBusinessName
@@ -194,7 +231,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                   const Text('This listing will be saved to your Supabase workspace and shown in ReSource Marketplace.', style: TextStyle(color: AppColors.slate, fontSize: 12, height: 1.35)),
                   const SizedBox(height: 14),
                   DropdownButtonFormField<String>(
-                    value: type,
+                    initialValue: type,
                     decoration: const InputDecoration(labelText: 'Listing type'),
                     items: const [
                       DropdownMenuItem(value: 'supply', child: Text('I can supply')),
@@ -218,7 +255,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       const SizedBox(width: 12),
                       Expanded(
                         child: DropdownButtonFormField<String>(
-                          value: unit,
+                          initialValue: unit,
                           decoration: const InputDecoration(labelText: 'Unit'),
                           items: const [
                             DropdownMenuItem(value: 'kg', child: Text('kg')),
@@ -280,7 +317,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           location: draft.location,
           description: draft.description,
         );
-    if (!mounted) return;
+    if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Listing added to ReSource Marketplace.')));
   }
 
@@ -356,11 +393,11 @@ class _ReadinessCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('PROFILE READINESS $complete / 2', style: AppTheme.eyebrowStyle.copyWith(color: AppColors.white.withOpacity(0.68))),
+          Text('PROFILE READINESS $complete / 2', style: AppTheme.eyebrowStyle.copyWith(color: AppColors.white.withValues(alpha: 0.68))),
           const SizedBox(height: 8),
           Text(title, style: Theme.of(context).textTheme.titleMedium?.copyWith(color: AppColors.white)),
           const SizedBox(height: 6),
-          Text(description, style: TextStyle(color: AppColors.white.withOpacity(0.82), height: 1.35)),
+          Text(description, style: TextStyle(color: AppColors.white.withValues(alpha: 0.82), height: 1.35)),
           if (complete < 2) ...[
             const SizedBox(height: 12),
             OutlinedButton.icon(
@@ -377,11 +414,23 @@ class _ReadinessCard extends StatelessWidget {
 }
 
 class _ProfileEditor extends StatelessWidget {
-  const _ProfileEditor({required this.formKey, required this.business, required this.sector, required this.onCancel, required this.onSave});
+  const _ProfileEditor({
+    required this.formKey,
+    required this.business,
+    required this.sector,
+    required this.sectors,
+    required this.isLoadingSectors,
+    required this.onRefreshSectors,
+    required this.onCancel,
+    required this.onSave,
+  });
 
   final GlobalKey<FormState> formKey;
   final TextEditingController business;
   final TextEditingController sector;
+  final List<IndustrySector> sectors;
+  final bool isLoadingSectors;
+  final VoidCallback onRefreshSectors;
   final VoidCallback onCancel;
   final VoidCallback onSave;
 
@@ -393,7 +442,31 @@ class _ProfileEditor extends StatelessWidget {
         children: [
           TextFormField(controller: business, decoration: const InputDecoration(labelText: 'Business name'), validator: (value) => value == null || value.trim().isEmpty ? 'Enter a business name.' : null),
           const SizedBox(height: 12),
-          TextFormField(controller: sector, decoration: const InputDecoration(labelText: 'Industry sector'), validator: (value) => value == null || value.trim().isEmpty ? 'Enter an industry sector.' : null),
+          if (isLoadingSectors)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 14),
+              child: Align(alignment: Alignment.centerLeft, child: CircularProgressIndicator(strokeWidth: 2)),
+            )
+          else if (sectors.isNotEmpty)
+            DropdownButtonFormField<String>(
+              initialValue: sectors.any((item) => item.name == sector.text) ? sector.text : null,
+              decoration: InputDecoration(
+                labelText: 'Industry sector',
+                helperText: 'Official DOSM MSIC sector catalogue',
+                suffixIcon: IconButton(onPressed: onRefreshSectors, tooltip: 'Refresh industry sectors', icon: const Icon(Icons.refresh_outlined)),
+              ),
+              items: sectors.map((item) => DropdownMenuItem(value: item.name, child: Text(item.name))).toList(),
+              onChanged: (value) {
+                if (value != null) sector.text = value;
+              },
+              validator: (value) => value == null || value.trim().isEmpty ? 'Choose an industry sector.' : null,
+            )
+          else
+            TextFormField(
+              controller: sector,
+              decoration: const InputDecoration(labelText: 'Industry sector', helperText: 'MSIC catalogue unavailable; enter your sector manually.'),
+              validator: (value) => value == null || value.trim().isEmpty ? 'Enter an industry sector.' : null,
+            ),
           const SizedBox(height: 12),
           Row(
             children: [

@@ -9,6 +9,7 @@ import 'package:go_router/go_router.dart';
 import '../../../app/theme.dart';
 import '../../../core/app_state.dart';
 import '../../../core/widgets.dart';
+import '../data/market_price_repository.dart';
 
 class _Benchmark {
   const _Benchmark({required this.label, required this.low, required this.high, required this.note});
@@ -67,9 +68,42 @@ class _FairPriceScreenState extends ConsumerState<FairPriceScreen> {
   String _condition = 'Sorted & dry';
   String _collection = 'Buyer collects';
   _NegotiationResult? _result;
+  final _marketPriceRepository = MarketPriceRepository();
+  CommodityPriceObservation? _commoditySignal;
+  PriceIndexObservation? _ppiSignal;
+  bool _isLoadingMarketSignals = true;
 
   static const _conditions = ['Mixed / unsorted', 'Sorted & dry', 'Verified grade'];
   static const _collectionTerms = ['Buyer collects', 'Seller delivers'];
+
+  @override
+  void initState() {
+    super.initState();
+    Future<void>.microtask(() => _loadMarketSignals(_product.text.trim()));
+  }
+
+  Future<void> _loadMarketSignals(String product) async {
+    if (!mounted) return;
+    setState(() => _isLoadingMarketSignals = true);
+    try {
+      final commodity = await _marketPriceRepository.fetchLatestCommodity(product);
+      final ppi = await _marketPriceRepository.fetchLatestMalaysiaPpi();
+      if (!mounted) return;
+      setState(() {
+        _commoditySignal = commodity;
+        _ppiSignal = ppi;
+        _isLoadingMarketSignals = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _commoditySignal = null;
+        _ppiSignal = null;
+        _isLoadingMarketSignals = false;
+      });
+      debugPrint('FairPrice market signals could not be loaded: $error');
+    }
+  }
 
   @override
   void dispose() {
@@ -82,10 +116,14 @@ class _FairPriceScreenState extends ConsumerState<FairPriceScreen> {
   Future<void> _start() async {
     if (!(_formKey.currentState?.validate() ?? false) || _isRunning) return;
 
+    final product = _product.text.trim();
     final quantity = double.parse(_quantity.text.trim());
     final proposedPrice = double.parse(_price.text.trim());
+    setState(() => _isRunning = true);
+    await _loadMarketSignals(product);
+    if (!mounted) return;
     final result = _calculateResult(
-      product: _product.text.trim(),
+      product: product,
       quantity: quantity,
       proposedPrice: proposedPrice,
     );
@@ -339,7 +377,7 @@ class _FairPriceScreenState extends ConsumerState<FairPriceScreen> {
                   children: [
                     Expanded(
                       child: DropdownButtonFormField<String>(
-                        value: _condition,
+                        initialValue: _condition,
                         decoration: const InputDecoration(labelText: 'Material condition'),
                         items: _conditions.map((value) => DropdownMenuItem(value: value, child: Text(value))).toList(),
                         onChanged: _isRunning ? null : (value) => setState(() => _condition = value ?? _condition),
@@ -348,7 +386,7 @@ class _FairPriceScreenState extends ConsumerState<FairPriceScreen> {
                     const SizedBox(width: 12),
                     Expanded(
                       child: DropdownButtonFormField<String>(
-                        value: _collection,
+                        initialValue: _collection,
                         decoration: const InputDecoration(labelText: 'Collection terms'),
                         items: _collectionTerms.map((value) => DropdownMenuItem(value: value, child: Text(value))).toList(),
                         onChanged: _isRunning ? null : (value) => setState(() => _collection = value ?? _collection),
@@ -372,6 +410,14 @@ class _FairPriceScreenState extends ConsumerState<FairPriceScreen> {
           const SpecDivider(label: 'INDICATIVE REFERENCE'),
           const SizedBox(height: 14),
           _BenchmarkCard(benchmark: previewBenchmark),
+          if (_isLoadingMarketSignals || _commoditySignal != null || _ppiSignal != null) ...[
+            const SizedBox(height: 12),
+            _MarketSignalCard(
+              commodity: _commoditySignal,
+              ppi: _ppiSignal,
+              isLoading: _isLoadingMarketSignals,
+            ),
+          ],
           if (_messages.isNotEmpty) ...[
             const SizedBox(height: 24),
             const SpecDivider(label: 'NEGOTIATION LOG'),
@@ -420,10 +466,90 @@ class _BenchmarkCard extends StatelessWidget {
             const SizedBox(height: 5),
             Text(benchmark.note, style: const TextStyle(color: AppColors.slate, fontSize: 12, height: 1.35)),
             const SizedBox(height: 10),
-            const Text('Prototype reference only — not a live market quote.', style: TextStyle(color: AppColors.slate, fontSize: 11, fontWeight: FontWeight.w600)),
+            const Text('Indicative in-app reference only — not a live Malaysian market quote.', style: TextStyle(color: AppColors.slate, fontSize: 11, fontWeight: FontWeight.w600)),
           ],
         ),
       ),
+    );
+  }
+}
+
+class _MarketSignalCard extends StatelessWidget {
+  const _MarketSignalCard({required this.commodity, required this.ppi, required this.isLoading});
+
+  final CommodityPriceObservation? commodity;
+  final PriceIndexObservation? ppi;
+  final bool isLoading;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.public_outlined, color: AppColors.navy, size: 20),
+                const SizedBox(width: 9),
+                Expanded(child: Text('EXTERNAL MARKET SIGNALS', style: AppTheme.eyebrowStyle)),
+                if (isLoading) const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
+              ],
+            ),
+            const SizedBox(height: 10),
+            if (commodity != null)
+              _MarketSignalLine(
+                label: commodity!.seriesName,
+                value: '${commodity!.currency} ${commodity!.value.toStringAsFixed(2)} / ${commodity!.unit.split('/').last}',
+                detail: 'World Bank Pink Sheet · ${_formatMonth(commodity!.observedOn)}',
+              ),
+            if (ppi != null) ...[
+              if (commodity != null) const SizedBox(height: 9),
+              _MarketSignalLine(
+                label: 'Malaysia PPI',
+                value: '${ppi!.indexValue.toStringAsFixed(1)} index points',
+                detail: 'DOSM · base ${ppi!.baseYear} · ${_formatMonth(ppi!.observedOn)}',
+              ),
+            ],
+            if (!isLoading && commodity == null && ppi == null)
+              const Text('No external signal is available for this material yet.', style: TextStyle(color: AppColors.slate, height: 1.35)),
+            const SizedBox(height: 10),
+            const Text('Context only: global commodity data and the Malaysian PPI are not direct local scrap quotes. Confirm grade, currency, logistics, and counterparty terms before agreeing a price.', style: TextStyle(color: AppColors.slate, fontSize: 11, height: 1.35)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _formatMonth(DateTime date) => '${date.year}-${date.month.toString().padLeft(2, '0')}';
+}
+
+class _MarketSignalLine extends StatelessWidget {
+  const _MarketSignalLine({required this.label, required this.value, required this.detail});
+
+  final String label;
+  final String value;
+  final String detail;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(label, style: Theme.of(context).textTheme.titleSmall),
+              const SizedBox(height: 2),
+              Text(detail, style: const TextStyle(color: AppColors.slate, fontSize: 11)),
+            ],
+          ),
+        ),
+        const SizedBox(width: 12),
+        Text(value, style: AppTheme.dataStyle.copyWith(fontSize: 13)),
+      ],
     );
   }
 }
@@ -444,17 +570,17 @@ class _PriceResult extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('RECOMMENDED RANGE', style: AppTheme.eyebrowStyle.copyWith(color: AppColors.white.withOpacity(0.65))),
+            Text('RECOMMENDED RANGE', style: AppTheme.eyebrowStyle.copyWith(color: AppColors.white.withValues(alpha: 0.65))),
             const SizedBox(height: 8),
             Text(result.rangeLabel, style: AppTheme.dataStyle.copyWith(fontSize: 28, fontWeight: FontWeight.w800, color: AppColors.white)),
             const SizedBox(height: 8),
-            Text('Suggested opening point: RM ${result.target.toStringAsFixed(2)}/kg', style: TextStyle(color: AppColors.white.withOpacity(0.86), fontSize: 13)),
+            Text('Suggested opening point: RM ${result.target.toStringAsFixed(2)}/kg', style: TextStyle(color: AppColors.white.withValues(alpha: 0.86), fontSize: 13)),
             const SizedBox(height: 14),
             _RangeLine(floor: result.floor, target: result.target, ceiling: result.ceiling),
             const SizedBox(height: 15),
-            Text(result.strategy, style: TextStyle(color: AppColors.white.withOpacity(0.88), height: 1.4)),
+            Text(result.strategy, style: TextStyle(color: AppColors.white.withValues(alpha: 0.88), height: 1.4)),
             const SizedBox(height: 12),
-            Text('Basis: ${result.product} · ${result.quantity.toStringAsFixed(0)} kg · ${result.benchmark.label}', style: TextStyle(color: AppColors.white.withOpacity(0.66), fontSize: 11, height: 1.35)),
+            Text('Basis: ${result.product} · ${result.quantity.toStringAsFixed(0)} kg · ${result.benchmark.label}', style: TextStyle(color: AppColors.white.withValues(alpha: 0.66), fontSize: 11, height: 1.35)),
             const SizedBox(height: 15),
             isSaved
                 ? const Text('SAVED FOR THIS SESSION', style: TextStyle(color: AppColors.white, fontWeight: FontWeight.w700, fontSize: 12))
@@ -484,20 +610,20 @@ class _RangeLine extends StatelessWidget {
       children: [
         Row(
           children: [
-            Text('RM ${floor.toStringAsFixed(2)}', style: TextStyle(color: AppColors.white.withOpacity(0.72), fontSize: 11)),
+            Text('RM ${floor.toStringAsFixed(2)}', style: TextStyle(color: AppColors.white.withValues(alpha: 0.72), fontSize: 11)),
             const Spacer(),
             Text('RM ${target.toStringAsFixed(2)} target', style: const TextStyle(color: AppColors.white, fontSize: 11, fontWeight: FontWeight.w700)),
             const Spacer(),
-            Text('RM ${ceiling.toStringAsFixed(2)}', style: TextStyle(color: AppColors.white.withOpacity(0.72), fontSize: 11)),
+            Text('RM ${ceiling.toStringAsFixed(2)}', style: TextStyle(color: AppColors.white.withValues(alpha: 0.72), fontSize: 11)),
           ],
         ),
         const SizedBox(height: 6),
         Row(
           children: [
             Container(width: 2, height: 16, color: AppColors.white),
-            Expanded(child: Container(height: 2, color: AppColors.white.withOpacity(0.76))),
+            Expanded(child: Container(height: 2, color: AppColors.white.withValues(alpha: 0.76))),
             Container(width: 3, height: 14, color: AppColors.amber),
-            Expanded(child: Container(height: 2, color: AppColors.white.withOpacity(0.76))),
+            Expanded(child: Container(height: 2, color: AppColors.white.withValues(alpha: 0.76))),
             Container(width: 2, height: 16, color: AppColors.white),
           ],
         ),

@@ -46,6 +46,7 @@ class _ProgramDefinition {
     required this.skills,
     required this.credential,
     required this.summary,
+    this.sourceName = 'IndustryHub curated catalogue',
   });
 
   final String id;
@@ -56,6 +57,7 @@ class _ProgramDefinition {
   final List<String> skills;
   final String credential;
   final String summary;
+  final String sourceName;
 }
 
 class _Program {
@@ -69,6 +71,7 @@ class _Program {
     required this.matchedSkills,
     required this.credential,
     required this.summary,
+    this.sourceName = 'IndustryHub curated catalogue',
   });
 
   final String id;
@@ -80,6 +83,7 @@ class _Program {
   final List<String> matchedSkills;
   final String credential;
   final String summary;
+  final String sourceName;
 }
 
 class _FollowUpPrompt {
@@ -326,6 +330,7 @@ class _SkillMatchScreenState extends ConsumerState<SkillMatchScreen> {
       skills: programme.skills,
       credential: programme.credential.isEmpty ? 'Programme details from the Supabase catalogue' : programme.credential,
       summary: programme.summary.isEmpty ? 'This programme is stored in your Supabase training catalogue.$sourceSuffix' : programme.summary,
+      sourceName: programme.sourceName,
     );
   }
 
@@ -346,6 +351,7 @@ class _SkillMatchScreenState extends ConsumerState<SkillMatchScreen> {
         matchedSkills: matchedSkills,
         credential: definition.credential,
         summary: '${definition.summary} $reason',
+        sourceName: definition.sourceName,
       );
     }).where((programme) => !onlyMatched || programme.matchedSkills.isNotEmpty).toList()
       ..sort((a, b) => b.match.compareTo(a.match));
@@ -734,6 +740,8 @@ class _ProgramCard extends StatelessWidget {
             ),
             const SizedBox(height: 7),
             Text(programme.provider, style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppColors.slate)),
+            const SizedBox(height: 3),
+            Text('Source: ${programme.sourceName}', style: const TextStyle(color: AppColors.slate, fontSize: 11)),
             const SizedBox(height: 10),
             Wrap(
               spacing: 8,
