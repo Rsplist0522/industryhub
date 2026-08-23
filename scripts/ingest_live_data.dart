@@ -5,7 +5,10 @@ import 'package:html/parser.dart' as html_parser;
 import 'package:http/http.dart' as http;
 
 const _courseraSearchUrl = 'https://www.coursera.org/courses';
-const _msicApiUrl = 'https://api.data.gov.my/data-catalogue?id=msic&limit=10000';
+const _msicApiUrl =
+    'https://api.data.gov.my/data-catalogue?id=msic&limit=10000';
+const _workforceSkillsApiUrl =
+    'https://api.data.gov.my/data-catalogue?id=lfs_qtr_sru_age&limit=10000';
 const _ppiCsvUrl = 'https://storage.dosm.gov.my/ppi/ppi.csv';
 const _fredSeries = <String, String>{
   'WPU102402': 'Secondary Aluminum',
@@ -17,13 +20,20 @@ Future<void> main(List<String> args) async {
   final dryRun = args.contains('--dry-run');
   final supabaseUrl = Platform.environment['SUPABASE_URL'];
   final serviceRoleKey = Platform.environment['SUPABASE_SERVICE_ROLE_KEY'];
-  if (!dryRun && (supabaseUrl == null || supabaseUrl.isEmpty || serviceRoleKey == null || serviceRoleKey.isEmpty)) {
-    stderr.writeln('Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY before running this importer.');
+  if (!dryRun &&
+      (supabaseUrl == null ||
+          supabaseUrl.isEmpty ||
+          serviceRoleKey == null ||
+          serviceRoleKey.isEmpty)) {
+    stderr.writeln(
+      'Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY before running this importer.',
+    );
     exitCode = 64;
     return;
   }
 
-  final courseQuery = _argumentValue(args, '--course-query') ?? 'software engineering';
+  final courseQuery =
+      _argumentValue(args, '--course-query') ?? 'software engineering';
   final api = dryRun || supabaseUrl == null || serviceRoleKey == null
       ? null
       : _SupabaseRestClient(Uri.parse(supabaseUrl), serviceRoleKey);
@@ -32,6 +42,7 @@ Future<void> main(List<String> args) async {
     await _upsertSources(api);
     var courseCount = 0;
     var msicCount = 0;
+    var workforceSkillCount = 0;
     var ppiCount = 0;
     var metalCount = 0;
     try {
@@ -45,6 +56,11 @@ Future<void> main(List<String> args) async {
       stderr.writeln('DOSM MSIC source skipped: $error');
     }
     try {
+      workforceSkillCount = await _importWorkforceSkills(client, api);
+    } catch (error) {
+      stderr.writeln('DOSM workforce-skills source skipped: $error');
+    }
+    try {
       ppiCount = await _importPpi(client, api);
     } catch (error) {
       stderr.writeln('DOSM PPI source skipped: $error');
@@ -54,7 +70,9 @@ Future<void> main(List<String> args) async {
     } catch (error) {
       stderr.writeln('FRED metal sources skipped: $error');
     }
-    stdout.writeln('${dryRun ? 'Live-source dry run' : 'Live ingestion'} complete: $courseCount courses, $msicCount MSIC rows, $ppiCount PPI rows, $metalCount metal observations.');
+    stdout.writeln(
+      '${dryRun ? 'Live-source dry run' : 'Live ingestion'} complete: $courseCount courses, $msicCount MSIC rows, $workforceSkillCount workforce-signal rows, $ppiCount PPI rows, $metalCount metal observations.',
+    );
   } finally {
     client.close();
   }
@@ -79,8 +97,19 @@ Future<void> _upsertSources(_SupabaseRestClient? api) async {
       'access_type': 'Dart HTML crawl',
       'source_url': _courseraSearchUrl,
       'requires_api_key': false,
-      'license': null,
-      'notes': 'Course records are imported from the public search page with outbound course URLs.',
+      'notes':
+          'Course records are imported from the public search page with outbound course URLs.',
+    },
+    {
+      'id': 'skillmatch-dosm-workforce-signal',
+      'module_key': 'skill_match',
+      'name': 'Quarterly Skills-Related Underemployment by Age',
+      'access_type': 'Public Open API',
+      'source_url': 'https://data.gov.my/data-catalogue/lfs_qtr_sru_age',
+      'requires_api_key': false,
+      'license': 'CC BY 4.0',
+      'notes':
+          'DOSM labour-force skills signal used as Malaysian workforce context for SkillMatch recommendations.',
     },
     {
       'id': 'resource-profile-msic-live',
@@ -90,7 +119,8 @@ Future<void> _upsertSources(_SupabaseRestClient? api) async {
       'source_url': 'https://data.gov.my/data-catalogue/msic',
       'requires_api_key': false,
       'license': 'CC BY 4.0',
-      'notes': 'Official DOSM classification rows imported through the public API.',
+      'notes':
+          'Official DOSM classification rows imported through the public API.',
     },
     {
       'id': 'fairprice-malaysia-ppi-live',
@@ -100,28 +130,48 @@ Future<void> _upsertSources(_SupabaseRestClient? api) async {
       'source_url': 'https://data.gov.my/data-catalogue/ppi',
       'requires_api_key': false,
       'license': 'CC BY 4.0',
-      'notes': 'Historical monthly PPI rows imported from the DOSM public CSV endpoint.',
+      'notes':
+          'Historical monthly PPI rows imported from the DOSM public CSV endpoint.',
     },
   ]);
 }
 
-Future<int> _importCoursera(http.Client client, _SupabaseRestClient? api, String query) async {
-  final uri = Uri.parse('$_courseraSearchUrl?query=${Uri.encodeQueryComponent(query)}');
-  final response = await client.get(uri, headers: {'User-Agent': 'IndustryHub-LiveDataImporter/1.0'}).timeout(const Duration(seconds: 30));
-  if (response.statusCode != 200) throw StateError('Coursera returned HTTP ${response.statusCode}.');
+Future<int> _importCoursera(
+  http.Client client,
+  _SupabaseRestClient? api,
+  String query,
+) async {
+  final uri = Uri.parse(
+    '$_courseraSearchUrl?query=${Uri.encodeQueryComponent(query)}',
+  );
+  final response = await client
+      .get(uri, headers: {'User-Agent': 'IndustryHub-LiveDataImporter/1.0'})
+      .timeout(const Duration(seconds: 30));
+  if (response.statusCode != 200) {
+    throw StateError('Coursera returned HTTP ${response.statusCode}.');
+  }
 
   final document = html_parser.parse(response.body);
   final seen = <String>{};
   final rows = <Map<String, dynamic>>[];
   for (final anchor in document.querySelectorAll('a[href]')) {
     final href = anchor.attributes['href'] ?? '';
-    if (!href.startsWith('/learn/') && !href.startsWith('/specializations/') && !href.startsWith('/professional-certificates/')) continue;
-    final courseUrl = Uri.parse('https://www.coursera.org$href').removeFragment().toString();
+    if (!href.startsWith('/learn/') &&
+        !href.startsWith('/specializations/') &&
+        !href.startsWith('/professional-certificates/')) {
+      continue;
+    }
+    final courseUrl = Uri.parse(
+      'https://www.coursera.org$href',
+    ).removeFragment().toString();
     if (!seen.add(courseUrl)) continue;
     final title = _cleanText(anchor.text);
-    if (title.length < 5 || title.toLowerCase().contains('coursera plus')) continue;
+    if (title.length < 5 || title.toLowerCase().contains('coursera plus')) {
+      continue;
+    }
     rows.add({
-      'id': 'coursera-${base64Url.encode(utf8.encode(courseUrl)).replaceAll('=', '')}',
+      'id':
+          'coursera-${base64Url.encode(utf8.encode(courseUrl)).replaceAll('=', '')}',
       'name': title,
       'provider': _providerFromCard(anchor) ?? 'Coursera provider',
       'skills': _skillsForQuery(query),
@@ -129,13 +179,18 @@ Future<int> _importCoursera(http.Client client, _SupabaseRestClient? api, String
       'duration_days': 0,
       'source_name': 'Coursera public course catalogue',
       'source_url': courseUrl,
-      'credential': href.startsWith('/professional-certificates/') ? 'Professional Certificate page' : 'Course or certificate details',
-      'summary': 'Live course listing imported for “$query”. Open the source page for current syllabus, pricing, and certificate terms.',
+      'credential': href.startsWith('/professional-certificates/')
+          ? 'Professional Certificate page'
+          : 'Course or certificate details',
+      'summary':
+          'Live course listing imported for “$query”. Open the source page for current syllabus, pricing, and certificate terms.',
       'is_active': true,
     });
     if (rows.length == 30) break;
   }
-  if (rows.isNotEmpty && api != null) await api.upsert('training_programmes', rows);
+  if (rows.isNotEmpty && api != null) {
+    await api.upsert('training_programmes', rows);
+  }
   return rows.length;
 }
 
@@ -152,39 +207,72 @@ String? _providerFromCard(dynamic anchor) {
 List<String> _skillsForQuery(String query) {
   final value = query.trim().toLowerCase();
   final skills = <String>[query.trim()];
-  if (value.contains('software') || value.contains('developer') || value.contains('program')) skills.add('Software engineering');
-  if (value.contains('data') || value.contains('analytics')) skills.add('Data and analytics');
-  if (value.contains('cloud') || value.contains('devops')) skills.add('Cloud and DevOps');
-  if (value.contains('web') || value.contains('full stack')) skills.add('Web development');
+  if (value.contains('software') ||
+      value.contains('developer') ||
+      value.contains('program')) {
+    skills.add('Software engineering');
+  }
+  if (value.contains('data') || value.contains('analytics')) {
+    skills.add('Data and analytics');
+  }
+  if (value.contains('cloud') || value.contains('devops')) {
+    skills.add('Cloud and DevOps');
+  }
+  if (value.contains('web') || value.contains('full stack')) {
+    skills.add('Web development');
+  }
   return skills.toSet().toList();
 }
 
 Future<int> _importMsic(http.Client client, _SupabaseRestClient? api) async {
-  final response = await client.get(Uri.parse(_msicApiUrl), headers: {'User-Agent': 'IndustryHub-LiveDataImporter/1.0'}).timeout(const Duration(seconds: 30));
-  if (response.statusCode != 200) throw StateError('DOSM MSIC returned HTTP ${response.statusCode}.');
+  final response = await client
+      .get(
+        Uri.parse(_msicApiUrl),
+        headers: {'User-Agent': 'IndustryHub-LiveDataImporter/1.0'},
+      )
+      .timeout(const Duration(seconds: 30));
+  if (response.statusCode != 200) {
+    throw StateError('DOSM MSIC returned HTTP ${response.statusCode}.');
+  }
   final decoded = jsonDecode(response.body);
-  if (decoded is! List) throw const FormatException('DOSM MSIC response was not a list.');
-  final rows = decoded.whereType<Map>().map((raw) {
-    final data = Map<String, dynamic>.from(raw);
-    final section = '${data['section'] ?? ''}'.trim();
-    final division = '${data['division'] ?? ''}'.trim();
-    final group = '${data['group'] ?? ''}'.trim();
-    final classCode = '${data['class'] ?? ''}'.trim();
-    final item = '${data['item'] ?? ''}'.trim();
-    final codeParts = [section, division, group, classCode, item].where((part) => part.isNotEmpty && part != '-');
-    return {
-      'item_code': codeParts.join('-'),
-      'digits': (data['digits'] as num?)?.toInt() ?? 0,
-      'section': section,
-      'division': division,
-      'group_code': group,
-      'class_code': classCode,
-      'description_en': '${data['desc_en'] ?? ''}'.trim(),
-      'description_bm': '${data['desc_bm'] ?? ''}'.trim(),
-      'source_name': 'Department of Statistics Malaysia',
-      'source_url': 'https://data.gov.my/data-catalogue/msic',
-    };
-  }).where((row) => (row['item_code'] as String).isNotEmpty && (row['description_en'] as String).isNotEmpty).toList();
+  if (decoded is! List) {
+    throw const FormatException('DOSM MSIC response was not a list.');
+  }
+  final rows = decoded
+      .whereType<Map>()
+      .map((raw) {
+        final data = Map<String, dynamic>.from(raw);
+        final section = '${data['section'] ?? ''}'.trim();
+        final division = '${data['division'] ?? ''}'.trim();
+        final group = '${data['group'] ?? ''}'.trim();
+        final classCode = '${data['class'] ?? ''}'.trim();
+        final item = '${data['item'] ?? ''}'.trim();
+        final codeParts = [
+          section,
+          division,
+          group,
+          classCode,
+          item,
+        ].where((part) => part.isNotEmpty && part != '-');
+        return {
+          'item_code': codeParts.join('-'),
+          'digits': (data['digits'] as num?)?.toInt() ?? 0,
+          'section': section,
+          'division': division,
+          'group_code': group,
+          'class_code': classCode,
+          'description_en': '${data['desc_en'] ?? ''}'.trim(),
+          'description_bm': '${data['desc_bm'] ?? ''}'.trim(),
+          'source_name': 'Department of Statistics Malaysia',
+          'source_url': 'https://data.gov.my/data-catalogue/msic',
+        };
+      })
+      .where(
+        (row) =>
+            (row['item_code'] as String).isNotEmpty &&
+            (row['description_en'] as String).isNotEmpty,
+      )
+      .toList();
   if (api != null) {
     for (final chunk in _chunks(rows, 500)) {
       await api.upsert('msic_codes', chunk);
@@ -193,19 +281,32 @@ Future<int> _importMsic(http.Client client, _SupabaseRestClient? api) async {
   return rows.length;
 }
 
-Future<int> _importFredMetalIndexes(http.Client client, _SupabaseRestClient? api) async {
+Future<int> _importFredMetalIndexes(
+  http.Client client,
+  _SupabaseRestClient? api,
+) async {
   var count = 0;
   for (final entry in _fredSeries.entries) {
-    final url = 'https://fred.stlouisfed.org/graph/fredgraph.csv?id=${entry.key}&cosd=2020-01-01';
+    final url =
+        'https://fred.stlouisfed.org/graph/fredgraph.csv?id=${entry.key}&cosd=2020-01-01';
     late final http.Response response;
     try {
-      response = await client.get(Uri.parse(url), headers: {'User-Agent': 'IndustryHub-LiveDataImporter/1.0'}).timeout(const Duration(seconds: 45));
+      response = await client
+          .get(
+            Uri.parse(url),
+            headers: {'User-Agent': 'IndustryHub-LiveDataImporter/1.0'},
+          )
+          .timeout(const Duration(seconds: 15));
     } catch (error) {
-      stderr.writeln('FRED ${entry.key} skipped after a temporary fetch error: $error');
+      stderr.writeln(
+        'FRED ${entry.key} skipped after a temporary fetch error: $error',
+      );
       continue;
     }
     if (response.statusCode != 200) {
-      stderr.writeln('FRED ${entry.key} skipped with HTTP ${response.statusCode}.');
+      stderr.writeln(
+        'FRED ${entry.key} skipped with HTTP ${response.statusCode}.',
+      );
       continue;
     }
     final lines = const LineSplitter().convert(response.body);
@@ -235,9 +336,73 @@ Future<int> _importFredMetalIndexes(http.Client client, _SupabaseRestClient? api
   return count;
 }
 
+Future<int> _importWorkforceSkills(
+  http.Client client,
+  _SupabaseRestClient? api,
+) async {
+  final response = await client
+      .get(
+        Uri.parse(_workforceSkillsApiUrl),
+        headers: {'User-Agent': 'IndustryHub-LiveDataImporter/1.0'},
+      )
+      .timeout(const Duration(seconds: 45));
+  if (response.statusCode != 200) {
+    throw StateError(
+      'DOSM workforce-skills API returned HTTP ${response.statusCode}.',
+    );
+  }
+  final decoded = jsonDecode(response.body);
+  if (decoded is! List) {
+    throw const FormatException(
+      'DOSM workforce-skills response was not a list.',
+    );
+  }
+  final rows = decoded
+      .whereType<Map>()
+      .map((raw) {
+        final data = Map<String, dynamic>.from(raw);
+        final value = data['sru'] is num
+            ? (data['sru'] as num).toDouble()
+            : double.tryParse('${data['sru'] ?? ''}');
+        final observedOn = '${data['date'] ?? ''}'.trim();
+        final variable = '${data['variable'] ?? ''}'.trim();
+        final ageGroup = '${data['age'] ?? 'Overall'}'.trim();
+        if (value == null || observedOn.isEmpty || variable.isEmpty) {
+          return null;
+        }
+        return <String, dynamic>{
+          'source_name': 'Department of Statistics Malaysia',
+          'source_url': 'https://data.gov.my/data-catalogue/lfs_qtr_sru_age',
+          'dataset_id': 'lfs_qtr_sru_age',
+          'variable': variable,
+          'age_group': ageGroup,
+          'observed_on': observedOn,
+          'signal_value': value,
+          'unit': variable.toLowerCase().contains('rate')
+              ? 'percent'
+              : "persons ('000)",
+        };
+      })
+      .whereType<Map<String, dynamic>>()
+      .toList();
+  if (api != null) {
+    for (final chunk in _chunks(rows, 500)) {
+      await api.upsert('workforce_skill_signals', chunk);
+    }
+  }
+  return rows.length;
+}
+
 Future<int> _importPpi(http.Client client, _SupabaseRestClient? api) async {
-  final response = await client.get(Uri.parse(_ppiCsvUrl), headers: {'User-Agent': 'IndustryHub-LiveDataImporter/1.0'}).timeout(const Duration(seconds: 30));
-  if (response.statusCode != 200) throw StateError('DOSM PPI returned HTTP ${response.statusCode}.');
+  final response = await client
+      .get(
+        Uri.parse(_ppiCsvUrl),
+        headers: {'User-Agent': 'IndustryHub-LiveDataImporter/1.0'},
+      )
+      .timeout(const Duration(seconds: 30));
+  if (response.statusCode != 200) {
+    throw StateError('DOSM PPI returned HTTP ${response.statusCode}.');
+  }
   final lines = const LineSplitter().convert(response.body);
   if (lines.length < 2) return 0;
   final rows = <Map<String, dynamic>>[];
@@ -282,18 +447,22 @@ class _SupabaseRestClient {
   Future<void> upsert(String table, List<Map<String, dynamic>> rows) async {
     if (rows.isEmpty) return;
     final endpoint = baseUrl.resolve('/rest/v1/$table');
-    final response = await _client.post(
-      endpoint,
-      headers: {
-        'apikey': serviceRoleKey,
-        'Authorization': 'Bearer $serviceRoleKey',
-        'Content-Type': 'application/json',
-        'Prefer': 'resolution=merge-duplicates,return=minimal',
-      },
-      body: jsonEncode(rows),
-    ).timeout(const Duration(seconds: 30));
+    final response = await _client
+        .post(
+          endpoint,
+          headers: {
+            'apikey': serviceRoleKey,
+            'Authorization': 'Bearer $serviceRoleKey',
+            'Content-Type': 'application/json',
+            'Prefer': 'resolution=merge-duplicates,return=minimal',
+          },
+          body: jsonEncode(rows),
+        )
+        .timeout(const Duration(seconds: 30));
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw StateError('Supabase upsert into $table failed with HTTP ${response.statusCode}: ${response.body}');
+      throw StateError(
+        'Supabase upsert into $table failed with HTTP ${response.statusCode}: ${response.body}',
+      );
     }
   }
 }
