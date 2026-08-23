@@ -79,6 +79,7 @@ Future<void> _upsertSources(_SupabaseRestClient? api) async {
       'access_type': 'Dart HTML crawl',
       'source_url': _courseraSearchUrl,
       'requires_api_key': false,
+      'license': null,
       'notes': 'Course records are imported from the public search page with outbound course URLs.',
     },
     {
