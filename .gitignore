@@ -24,8 +24,6 @@ migrate_working_dir/
 #.vscode/
 
 # Environment files
-.env
-.env.*
 !.env.example
 
 # Flutter/Dart/Pub related
