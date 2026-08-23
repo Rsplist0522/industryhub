@@ -1,11 +1,10 @@
-// Firestore-backed application state for IndustryHub.
-// Replaces local-only profile and listing mutations with Cloud Firestore reads
-// and writes. Saved matches and FairPrice counters remain local for now.
+// Supabase-backed application state for IndustryHub.
+// Replaces the previous Firebase/Firestore persistence layer while keeping
+// the existing Profile and Marketplace screen interfaces unchanged.
 
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 class Listing {
   const Listing({
@@ -45,35 +44,21 @@ class Listing {
         verified: verified,
       );
 
-  factory Listing.fromFirestore(DocumentSnapshot<Map<String, dynamic>> document) {
-    final data = document.data() ?? const <String, dynamic>{};
+  factory Listing.fromSupabase(Map<String, dynamic> data) {
     final rawQuantity = data['quantity'];
     return Listing(
-      id: document.id,
+      id: data['id'] as String? ?? '',
       type: data['type'] as String? ?? 'supply',
       material: data['material'] as String? ?? 'Unnamed material',
-      quantity: rawQuantity is num ? rawQuantity.toDouble() : 0,
+      quantity: rawQuantity is num ? rawQuantity.toDouble() : double.tryParse('$rawQuantity') ?? 0,
       unit: data['unit'] as String? ?? 'kg',
       location: data['location'] as String? ?? 'Location not specified',
       description: data['description'] as String? ?? '',
       owner: data['owner'] as String? ?? 'Unspecified business',
-      ownerId: data['ownerId'] as String? ?? '',
+      ownerId: data['owner_id'] as String? ?? '',
       verified: data['verified'] as bool? ?? false,
     );
   }
-
-  Map<String, Object?> toFirestore() => {
-        'type': type,
-        'material': material,
-        'quantity': quantity,
-        'unit': unit,
-        'location': location,
-        'description': description,
-        'owner': owner,
-        'ownerId': ownerId,
-        'verified': verified,
-        'updatedAt': FieldValue.serverTimestamp(),
-      };
 }
 
 class CompanyProfile {
@@ -89,8 +74,8 @@ class CompanyProfile {
   final String role;
   final bool verified;
 
-  factory CompanyProfile.fromFirestore(Map<String, dynamic> data) => CompanyProfile(
-        businessName: data['businessName'] as String? ?? 'Kencana Precision Works',
+  factory CompanyProfile.fromSupabase(Map<String, dynamic> data) => CompanyProfile(
+        businessName: data['business_name'] as String? ?? 'Kencana Precision Works',
         sector: data['sector'] as String? ?? 'Precision manufacturing',
         role: data['role'] as String? ?? 'Factory owner',
         verified: data['verified'] as bool? ?? false,
@@ -102,14 +87,6 @@ class CompanyProfile {
         role: role ?? this.role,
         verified: verified ?? this.verified,
       );
-
-  Map<String, Object?> toFirestore() => {
-        'businessName': businessName,
-        'sector': sector,
-        'role': role,
-        'verified': verified,
-        'updatedAt': FieldValue.serverTimestamp(),
-      };
 }
 
 class IndustryHubState {
@@ -146,51 +123,61 @@ class IndustryHubState {
 }
 
 class IndustryHubNotifier extends Notifier<IndustryHubState> {
-  late final FirebaseFirestore _firestore;
-  late final FirebaseAuth _auth;
+  late final SupabaseClient _supabase;
   var _disposed = false;
 
   @override
   IndustryHubState build() {
-    _firestore = FirebaseFirestore.instance;
-    _auth = FirebaseAuth.instance;
+    _supabase = Supabase.instance.client;
     ref.onDispose(() => _disposed = true);
     Future<void>.microtask(_loadProfileAndListings);
     return const IndustryHubState();
   }
 
+  Future<User?> _ensureSignedInUser() async {
+    final existingUser = _supabase.auth.currentUser;
+    if (existingUser != null) return existingUser;
+    final response = await _supabase.auth.signInAnonymously();
+    return response.user;
+  }
+
   Future<void> _loadProfileAndListings() async {
-    final user = _auth.currentUser;
-    if (user == null) {
-      state = state.copyWith(isLoading: false);
-      return;
-    }
-
     try {
-      final profileReference = _firestore.collection('users').doc(user.uid);
-      final profileSnapshot = await profileReference.get();
-      final profile = profileSnapshot.exists
-          ? CompanyProfile.fromFirestore(profileSnapshot.data() ?? const <String, dynamic>{})
-          : const CompanyProfile();
-
-      if (!profileSnapshot.exists) {
-        await profileReference.set({...profile.toFirestore(), 'createdAt': FieldValue.serverTimestamp()});
+      final user = await _ensureSignedInUser();
+      if (user == null) {
+        if (!_disposed) state = state.copyWith(isLoading: false);
+        return;
       }
 
-      final listingSnapshot = await _firestore.collection('listings').get();
-      final listings = listingSnapshot.docs.map(Listing.fromFirestore).toList();
+      final profileRow = await _supabase.from('profiles').select().eq('user_id', user.id).maybeSingle();
+      final profile = profileRow == null ? const CompanyProfile() : CompanyProfile.fromSupabase(profileRow);
+
+      if (profileRow == null) {
+        await _supabase.from('profiles').insert({
+          'user_id': user.id,
+          'business_name': profile.businessName,
+          'sector': profile.sector,
+          'role': profile.role,
+        });
+      }
+
+      final listingRows = await _supabase.from('listings').select().order('created_at', ascending: false);
+      final listings = (listingRows as List)
+          .map((row) => Listing.fromSupabase(Map<String, dynamic>.from(row as Map)))
+          .toList();
+
       if (_disposed) return;
       state = state.copyWith(profile: profile, listings: listings, isLoading: false);
     } catch (error) {
-      debugPrint('IndustryHub Firestore load failed: $error');
+      debugPrint('IndustryHub Supabase load failed: $error');
       if (!_disposed) state = state.copyWith(isLoading: false);
     }
   }
 
-  Future<void> refreshFirestoreData() => _loadProfileAndListings();
+  Future<void> refreshSupabaseData() => _loadProfileAndListings();
 
   Future<void> updateProfile({String? businessName, String? sector, String? role}) async {
-    final user = _auth.currentUser;
+    final user = await _ensureSignedInUser();
     if (user == null) return;
 
     final updatedProfile = state.profile.copyWith(
@@ -200,21 +187,24 @@ class IndustryHubNotifier extends Notifier<IndustryHubState> {
     );
 
     try {
-      await _firestore.collection('users').doc(user.uid).set(updatedProfile.toFirestore(), SetOptions(merge: true));
+      await _supabase.from('profiles').update({
+        'business_name': updatedProfile.businessName,
+        'sector': updatedProfile.sector,
+        'role': updatedProfile.role,
+      }).eq('user_id', user.id);
+
       var updatedListings = state.listings;
       if (updatedProfile.businessName != state.profile.businessName) {
-        final ownedSnapshot = await _firestore.collection('listings').where('ownerId', isEqualTo: user.uid).get();
-        final batch = _firestore.batch();
-        for (final document in ownedSnapshot.docs) {
-          batch.update(document.reference, {'owner': updatedProfile.businessName, 'updatedAt': FieldValue.serverTimestamp()});
-        }
-        if (ownedSnapshot.docs.isNotEmpty) await batch.commit();
-        updatedListings = state.listings.map((listing) => listing.ownerId == user.uid ? listing.copyWith(owner: updatedProfile.businessName) : listing).toList();
+        await _supabase.from('listings').update({'owner': updatedProfile.businessName}).eq('owner_id', user.id);
+        updatedListings = state.listings
+            .map((listing) => listing.ownerId == user.id ? listing.copyWith(owner: updatedProfile.businessName) : listing)
+            .toList();
       }
+
       if (_disposed) return;
       state = state.copyWith(profile: updatedProfile, listings: updatedListings);
     } catch (error) {
-      debugPrint('IndustryHub profile update failed: $error');
+      debugPrint('IndustryHub Supabase profile update failed: $error');
     }
   }
 
@@ -226,42 +216,42 @@ class IndustryHubNotifier extends Notifier<IndustryHubState> {
     required String location,
     required String description,
   }) async {
-    final user = _auth.currentUser;
+    final user = await _ensureSignedInUser();
     if (user == null) return;
 
-    final reference = _firestore.collection('listings').doc();
-    final listing = Listing(
-      id: reference.id,
-      type: type,
-      material: material.trim(),
-      quantity: quantity,
-      unit: unit,
-      location: location.trim(),
-      description: description.trim(),
-      owner: state.profile.businessName,
-      ownerId: user.uid,
-      verified: state.profile.verified,
-    );
-
     try {
-      await reference.set({...listing.toFirestore(), 'createdAt': FieldValue.serverTimestamp()});
+      final createdRow = await _supabase
+          .from('listings')
+          .insert({
+            'type': type,
+            'material': material.trim(),
+            'quantity': quantity,
+            'unit': unit,
+            'location': location.trim(),
+            'description': description.trim(),
+            'owner': state.profile.businessName,
+            'owner_id': user.id,
+          })
+          .select()
+          .single();
+      final listing = Listing.fromSupabase(Map<String, dynamic>.from(createdRow));
       if (_disposed) return;
       state = state.copyWith(listings: [listing, ...state.listings]);
     } catch (error) {
-      debugPrint('IndustryHub listing creation failed: $error');
+      debugPrint('IndustryHub Supabase listing creation failed: $error');
     }
   }
 
   Future<void> removeListing(String id) async {
-    final user = _auth.currentUser;
+    final user = await _ensureSignedInUser();
     if (user == null) return;
 
     try {
-      await _firestore.collection('listings').doc(id).delete();
+      await _supabase.from('listings').delete().eq('id', id).eq('owner_id', user.id);
       if (_disposed) return;
       state = state.copyWith(listings: state.listings.where((item) => item.id != id).toList());
     } catch (error) {
-      debugPrint('IndustryHub listing removal failed: $error');
+      debugPrint('IndustryHub Supabase listing removal failed: $error');
     }
   }
 

@@ -1,7 +1,8 @@
-// Firestore access for the IndustryHub SkillMatch programme catalogue.
-// This layer keeps Cloud Firestore document parsing outside the presentation UI.
+// Supabase access for the curated IndustryHub SkillMatch programme catalogue.
+// The legacy model name is retained temporarily so the existing SkillMatch
+// presentation file does not require a UI rewrite during backend migration.
 
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 class FirestoreTrainingProgramme {
   const FirestoreTrainingProgramme({
@@ -28,33 +29,33 @@ class FirestoreTrainingProgramme {
   final String credential;
   final String summary;
 
-  factory FirestoreTrainingProgramme.fromDocument(DocumentSnapshot<Map<String, dynamic>> document) {
-    final data = document.data() ?? const <String, dynamic>{};
+  factory FirestoreTrainingProgramme.fromSupabase(Map<String, dynamic> data) {
     final rawSkills = data['skills'];
-    final rawDuration = data['durationDays'];
-
+    final rawDuration = data['duration_days'] ?? data['durationDays'];
     return FirestoreTrainingProgramme(
-      id: document.id,
-      name: data['name'] as String? ?? 'Unnamed programme',
+      id: data['id'] as String? ?? '',
+      name: data['name'] as String? ?? data['title'] as String? ?? 'Unnamed programme',
       provider: data['provider'] as String? ?? 'Unspecified provider',
-      skills: rawSkills is List ? rawSkills.whereType<String>().toList() : const [],
+      skills: rawSkills is List ? rawSkills.map((skill) => '$skill').toList() : const [],
       level: data['level'] as String? ?? 'Unspecified level',
-      durationDays: rawDuration is num ? rawDuration.toInt() : 0,
-      sourceName: data['sourceName'] as String? ?? 'Firestore programme catalogue',
-      sourceUrl: data['sourceUrl'] as String? ?? '',
+      durationDays: rawDuration is num ? rawDuration.toInt() : int.tryParse('$rawDuration') ?? 0,
+      sourceName: data['source_name'] as String? ?? data['sourceName'] as String? ?? 'Supabase programme catalogue',
+      sourceUrl: data['source_url'] as String? ?? data['sourceUrl'] as String? ?? '',
       credential: data['credential'] as String? ?? '',
-      summary: data['summary'] as String? ?? '',
+      summary: data['summary'] as String? ?? data['description'] as String? ?? '',
     );
   }
 }
 
 class TrainingProgrammeRepository {
-  TrainingProgrammeRepository({FirebaseFirestore? firestore}) : _firestore = firestore ?? FirebaseFirestore.instance;
+  TrainingProgrammeRepository({SupabaseClient? supabase}) : _supabase = supabase ?? Supabase.instance.client;
 
-  final FirebaseFirestore _firestore;
+  final SupabaseClient _supabase;
 
   Future<List<FirestoreTrainingProgramme>> fetchActiveProgrammes() async {
-    final snapshot = await _firestore.collection('training_programmes').where('active', isEqualTo: true).get();
-    return snapshot.docs.map(FirestoreTrainingProgramme.fromDocument).toList();
+    final rows = await _supabase.from('training_programmes').select().eq('is_active', true);
+    return (rows as List)
+        .map((row) => FirestoreTrainingProgramme.fromSupabase(Map<String, dynamic>.from(row as Map)))
+        .toList();
   }
 }
