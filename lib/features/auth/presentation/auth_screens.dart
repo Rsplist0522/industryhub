@@ -204,21 +204,31 @@ class _RoleSelectScreenState extends State<RoleSelectScreen> {
             description: 'This tunes your dashboard. You can still access every module later.',
           ),
           const SizedBox(height: 22),
-          ...roles.map((role) => Padding(
-                padding: const EdgeInsets.only(bottom: 12),
-                child: Card(
-                  child: RadioListTile<String>(
-                    value: role.$1,
-                    groupValue: selected,
-                    onChanged: (value) => setState(() => selected = value!),
-                    title: Text(role.$1, style: const TextStyle(fontWeight: FontWeight.w700)),
-                    subtitle: Padding(padding: const EdgeInsets.only(top: 5), child: Text(role.$2)),
-                    secondary: Icon(role.$3, color: AppColors.navy),
-                    activeColor: AppColors.navy,
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-                  ),
-                ),
-              )),
+          RadioGroup<String>(
+            groupValue: selected,
+            onChanged: (value) {
+              if (value != null) setState(() => selected = value);
+            },
+            child: Column(
+              children: roles
+                  .map(
+                    (role) => Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: Card(
+                        child: RadioListTile<String>(
+                          value: role.$1,
+                          title: Text(role.$1, style: const TextStyle(fontWeight: FontWeight.w700)),
+                          subtitle: Padding(padding: const EdgeInsets.only(top: 5), child: Text(role.$2)),
+                          secondary: Icon(role.$3, color: AppColors.navy),
+                          activeColor: AppColors.navy,
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                        ),
+                      ),
+                    ),
+                  )
+                  .toList(),
+            ),
+          ),
           const SizedBox(height: 10),
           FilledButton(onPressed: () => context.go('/home'), child: const Text('Enter IndustryHub')),
         ],

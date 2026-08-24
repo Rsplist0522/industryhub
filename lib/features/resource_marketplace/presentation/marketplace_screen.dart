@@ -5,6 +5,8 @@ import '../../../app/theme.dart';
 import '../../../core/app_state.dart';
 import '../../../core/widgets.dart';
 import '../data/deal_request_repository.dart';
+import '../data/industrial_context_repository.dart';
+import '../presentation/marketplace_industry_context_card.dart';
 
 class MarketplaceScreen extends ConsumerStatefulWidget {
   const MarketplaceScreen({super.key, this.onHome});
@@ -36,6 +38,7 @@ class _SavedMarketplaceSearch {
 class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
   final _search = TextEditingController();
   final _dealRequestRepository = DealRequestRepository();
+  final _industrialContextRepository = IndustrialContextRepository();
   final _transactions = <DealRequestRecord>[];
   final _requestedListingKeys = <String>{};
 
@@ -49,11 +52,35 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
   bool _isLoadingHistory = true;
   bool _isSendingRequest = false;
   String? _historyError;
+  IndustrialContext? _industrialContext;
+  bool _isLoadingIndustrialContext = true;
+  String? _industrialContextError;
+  String _industrialContextLocation = 'Malaysia';
+  String _selectedOfficialContextState = 'Pulau Pinang';
+
+  static const _officialContextStates = <String>[
+    'Johor',
+    'Kedah',
+    'Kelantan',
+    'Melaka',
+    'Negeri Sembilan',
+    'Pahang',
+    'Perak',
+    'Perlis',
+    'Pulau Pinang',
+    'Sabah',
+    'Sarawak',
+    'Selangor',
+    'Terengganu',
+    'W.P. Kuala Lumpur',
+    'W.P. Labuan',
+  ];
 
   @override
   void initState() {
     super.initState();
     Future<void>.microtask(_loadOutgoingRequests);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadIndustrialContext());
   }
 
   @override
@@ -86,9 +113,40 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
       if (!mounted) return;
       setState(() {
         _isLoadingHistory = false;
-        _historyError = 'Firestore request history could not be loaded.';
+        _historyError = 'Supabase request history could not be loaded.';
       });
       debugPrint('Marketplace request history could not be loaded: $error');
+    }
+  }
+
+  Future<void> _loadIndustrialContext({String? marketplaceLocation}) async {
+    final targetLocation = marketplaceLocation ?? _location ?? _selectedOfficialContextState;
+
+    setState(() {
+      _isLoadingIndustrialContext = true;
+      _industrialContextError = null;
+      _industrialContextLocation = targetLocation;
+    });
+
+    try {
+      final result = await _industrialContextRepository.fetchManufacturingContext(
+        marketplaceLocation: targetLocation,
+      );
+      if (!mounted) return;
+      setState(() {
+        _industrialContext = result;
+        if (result != null && _officialContextStates.contains(result.state)) {
+          _selectedOfficialContextState = result.state;
+        }
+        _isLoadingIndustrialContext = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _isLoadingIndustrialContext = false;
+        _industrialContextError = 'Official industry data is temporarily unavailable.';
+      });
+      debugPrint('Marketplace industry context could not be loaded: $error');
     }
   }
 
@@ -229,6 +287,32 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
             const SizedBox(height: 10),
             _SavedSearchBanner(onApply: _applySavedSearch, onClear: () => setState(() => _savedSearch = null)),
           ],
+          const SizedBox(height: 16),
+          DropdownButtonFormField<String>(
+            initialValue: _selectedOfficialContextState,
+            isExpanded: true,
+            decoration: const InputDecoration(
+              labelText: 'Official data region',
+              helperText: 'Choose a state to view its manufacturing context.',
+              prefixIcon: Icon(Icons.location_city_outlined),
+            ),
+            items: _officialContextStates
+                .map((state) => DropdownMenuItem(value: state, child: Text(state)))
+                .toList(),
+            onChanged: (state) {
+              if (state == null || state == _selectedOfficialContextState) return;
+              setState(() => _selectedOfficialContextState = state);
+              _loadIndustrialContext(marketplaceLocation: state);
+            },
+          ),
+          const SizedBox(height: 12),
+          MarketplaceIndustryContextCard(
+            context: _industrialContext,
+            selectedLocation: _industrialContextLocation,
+            isLoading: _isLoadingIndustrialContext,
+            errorMessage: _industrialContextError,
+            onRefresh: _loadIndustrialContext,
+          ),
           const SizedBox(height: 22),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -368,6 +452,8 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
               const SizedBox(height: 14),
               _DetailLine(label: 'Business', value: listing.owner),
               _DetailLine(label: 'Quantity', value: '${listing.quantity.toStringAsFixed(0)} ${listing.unit}'),
+              if (listing.askingPricePerKg != null)
+                _DetailLine(label: 'Asking price', value: 'RM ${listing.askingPricePerKg!.toStringAsFixed(2)}/kg'),
               _DetailLine(label: 'Location', value: listing.location),
               _DetailLine(label: 'Description', value: listing.description),
               if (listing.verified) const _DetailLine(label: 'Trust status', value: 'Verified ReSource business'),
@@ -518,7 +604,7 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
                   const Text('Use the filters below to focus on a viable supply or demand match.', style: TextStyle(color: AppColors.slate, height: 1.35)),
                   const SizedBox(height: 20),
                   DropdownButtonFormField<String>(
-                    value: draftMaterial ?? 'all',
+                    initialValue: draftMaterial ?? 'all',
                     decoration: const InputDecoration(labelText: 'Material'),
                     items: [
                       const DropdownMenuItem(value: 'all', child: Text('Any material')),
@@ -528,7 +614,7 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
                   ),
                   const SizedBox(height: 14),
                   DropdownButtonFormField<String>(
-                    value: draftLocation ?? 'all',
+                    initialValue: draftLocation ?? 'all',
                     decoration: const InputDecoration(labelText: 'Location'),
                     items: [
                       const DropdownMenuItem(value: 'all', child: Text('Any location')),
@@ -575,6 +661,7 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
                       Expanded(
                         child: FilledButton(
                           onPressed: () {
+                            final selectedLocation = draftLocation;
                             setState(() {
                               _material = draftMaterial;
                               _location = draftLocation;
@@ -582,6 +669,9 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
                               _minimumQuantity = draftMinimumQuantity;
                             });
                             Navigator.pop(sheetContext);
+                            if (selectedLocation != null) {
+                              _loadIndustrialContext(marketplaceLocation: selectedLocation);
+                            }
                           },
                           child: const Text('Show results'),
                         ),
@@ -617,7 +707,7 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
             children: [
               Text('Transaction history', style: Theme.of(sheetContext).textTheme.titleLarge),
               const SizedBox(height: 4),
-              const Text('Outgoing deal requests saved to your Firestore account.', style: TextStyle(color: AppColors.slate)),
+              const Text('Outgoing deal requests saved to your Supabase workspace.', style: TextStyle(color: AppColors.slate)),
               const SizedBox(height: 14),
               if (_isLoadingHistory)
                 const Center(child: Padding(padding: EdgeInsets.all(20), child: CircularProgressIndicator()))
@@ -917,7 +1007,7 @@ class _RequestStatus extends StatelessWidget {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(color: AppColors.green.withOpacity(0.10), borderRadius: BorderRadius.circular(8)),
+      decoration: BoxDecoration(color: AppColors.green.withValues(alpha: 0.10), borderRadius: BorderRadius.circular(8)),
       child: const Row(
         children: [
           Icon(Icons.check_circle_outline, color: AppColors.green),
@@ -958,7 +1048,7 @@ class _SavedSearchBanner extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(color: AppColors.green.withOpacity(0.08), border: Border.all(color: AppColors.green.withOpacity(0.25)), borderRadius: BorderRadius.circular(8)),
+      decoration: BoxDecoration(color: AppColors.green.withValues(alpha: 0.08), border: Border.all(color: AppColors.green.withValues(alpha: 0.25)), borderRadius: BorderRadius.circular(8)),
       child: Row(
         children: [
           const Icon(Icons.bookmark_added_outlined, color: AppColors.green, size: 18),
