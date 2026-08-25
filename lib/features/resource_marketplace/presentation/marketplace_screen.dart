@@ -181,9 +181,16 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
       );
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not load presentation listings: $error')),
-      );
+      final details = error.toString().toLowerCase();
+      final message =
+          details.contains('permission') ||
+              details.contains('row-level security') ||
+              details.contains('42501')
+          ? 'Supabase denied the listing write. Apply the latest migration, then sign out and sign back in.'
+          : 'Could not load presentation listings. Check your connection and try again.';
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(message)));
     } finally {
       if (mounted) setState(() => _isLoadingPresentationListings = false);
     }
