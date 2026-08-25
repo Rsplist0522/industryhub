@@ -10,6 +10,7 @@ import '../../../app/theme.dart';
 import '../../../core/app_state.dart';
 import '../../../core/services.dart';
 import '../../../core/widgets.dart';
+import '../../../core/validators.dart';
 import '../data/market_price_repository.dart';
 
 class _Benchmark {
@@ -98,6 +99,7 @@ class _FairPriceScreenState extends ConsumerState<FairPriceScreen> {
 
   bool _isRunning = false;
   bool _isChatThinking = false;
+  bool _isSavingRecommendation = false;
   bool _isSaved = false;
   String _selectedMaterial = 'Aluminium';
   int _round = 0;
@@ -450,26 +452,45 @@ External context loaded: ${_materialIndexSignal?.series ?? 'No material-specific
 
   double _roundToFiftySen(double value) => (value * 2).round() / 2;
 
-  void _saveRecommendation() {
-    if (_result == null) return;
-    if (_isSaved) {
+  Future<void> _saveRecommendation() async {
+    final result = _result;
+    if (result == null || _isSaved || _isSavingRecommendation) return;
+
+    setState(() => _isSavingRecommendation = true);
+    try {
+      await ref
+          .read(appStateProvider.notifier)
+          .saveNegotiation(
+            product: result.product,
+            quantity: result.quantity,
+            proposedPrice: result.proposedPrice,
+            floorPrice: result.floor,
+            targetPrice: result.target,
+            ceilingPrice: result.ceiling,
+            condition: _condition,
+            collectionTerms: _collection,
+            strategy: result.strategy,
+            hasLiveEvidence: result.benchmark.isLiveEvidence,
+          );
+      if (!mounted) return;
+      setState(() => _isSaved = true);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Price recommendation saved to your profile.'),
+        ),
+      );
+    } catch (_) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
-            'This recommendation is already saved for this session.',
+            'Price recommendation could not be saved. Please check your connection and try again.',
           ),
         ),
       );
-      return;
+    } finally {
+      if (mounted) setState(() => _isSavingRecommendation = false);
     }
-
-    setState(() => _isSaved = true);
-    ref.read(appStateProvider.notifier).startNegotiation();
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Price recommendation saved to your profile.'),
-      ),
-    );
   }
 
   void _resetScenario() {
@@ -498,17 +519,11 @@ External context loaded: ${_materialIndexSignal?.series ?? 'No material-specific
     }
   }
 
-  String? _requiredText(String? value) => value == null || value.trim().isEmpty
-      ? 'Enter a material or product name.'
-      : null;
+  String? _requiredText(String? value) =>
+      validateRequiredText(value, label: 'a material or product name');
 
-  String? _positiveNumber(String? value, String fieldName) {
-    final number = double.tryParse(value?.trim() ?? '');
-    if (number == null || number <= 0) {
-      return 'Enter a valid $fieldName above zero.';
-    }
-    return null;
-  }
+  String? _positiveNumber(String? value, String fieldName) =>
+      validatePositiveNumber(value, label: fieldName);
 
   @override
   Widget build(BuildContext context) {
@@ -584,6 +599,7 @@ External context loaded: ${_materialIndexSignal?.series ?? 'No material-specific
                 const SizedBox(height: 12),
                 TextFormField(
                   controller: _product,
+                  maxLength: 120,
                   decoration: const InputDecoration(
                     labelText: 'Specific product or material',
                     hintText: 'For example: 6061 aluminium machining offcuts',
@@ -740,6 +756,7 @@ External context loaded: ${_materialIndexSignal?.series ?? 'No material-specific
               result: _result!,
               advice: _aiAdvice,
               isSaved: _isSaved,
+              isSaving: _isSavingRecommendation,
               onSave: _saveRecommendation,
             ),
             const SizedBox(height: 24),
@@ -1028,13 +1045,15 @@ class _PriceResult extends StatelessWidget {
     required this.result,
     required this.advice,
     required this.isSaved,
+    required this.isSaving,
     required this.onSave,
   });
 
   final _NegotiationResult result;
   final _AiNegotiationAdvice? advice;
   final bool isSaved;
-  final VoidCallback onSave;
+  final bool isSaving;
+  final Future<void> Function() onSave;
 
   @override
   Widget build(BuildContext context) {
@@ -1201,13 +1220,17 @@ class _PriceResult extends StatelessWidget {
                     ),
                   )
                 : OutlinedButton.icon(
-                    onPressed: onSave,
+                    onPressed: isSaving
+                        ? null
+                        : () {
+                            onSave();
+                          },
                     style: OutlinedButton.styleFrom(
                       foregroundColor: AppColors.white,
                       side: const BorderSide(color: AppColors.white),
                     ),
                     icon: const Icon(Icons.bookmark_add_outlined, size: 18),
-                    label: const Text('Save recommendation'),
+                    label: Text(isSaving ? 'Saving…' : 'Save recommendation'),
                   ),
           ],
         ),

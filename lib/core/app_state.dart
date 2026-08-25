@@ -34,18 +34,18 @@ class Listing {
   final double? askingPricePerKg;
 
   Listing copyWith({String? owner, double? askingPricePerKg}) => Listing(
-        id: id,
-        type: type,
-        material: material,
-        quantity: quantity,
-        unit: unit,
-        location: location,
-        description: description,
-        owner: owner ?? this.owner,
-        ownerId: ownerId,
-        verified: verified,
-        askingPricePerKg: askingPricePerKg ?? this.askingPricePerKg,
-      );
+    id: id,
+    type: type,
+    material: material,
+    quantity: quantity,
+    unit: unit,
+    location: location,
+    description: description,
+    owner: owner ?? this.owner,
+    ownerId: ownerId,
+    verified: verified,
+    askingPricePerKg: askingPricePerKg ?? this.askingPricePerKg,
+  );
 
   factory Listing.fromSupabase(Map<String, dynamic> data) {
     final rawQuantity = data['quantity'];
@@ -53,7 +53,9 @@ class Listing {
       id: data['id'] as String? ?? '',
       type: data['type'] as String? ?? 'supply',
       material: data['material'] as String? ?? 'Unnamed material',
-      quantity: rawQuantity is num ? rawQuantity.toDouble() : double.tryParse('$rawQuantity') ?? 0,
+      quantity: rawQuantity is num
+          ? rawQuantity.toDouble()
+          : double.tryParse('$rawQuantity') ?? 0,
       unit: data['unit'] as String? ?? 'kg',
       location: data['location'] as String? ?? 'Location not specified',
       description: data['description'] as String? ?? '',
@@ -67,9 +69,9 @@ class Listing {
 
 class CompanyProfile {
   const CompanyProfile({
-    this.businessName = 'Kencana Precision Works',
-    this.sector = 'Precision manufacturing',
-    this.role = 'Factory owner',
+    this.businessName = '',
+    this.sector = '',
+    this.role = '',
     this.verified = false,
     this.msicCode,
     this.msicDescription,
@@ -82,31 +84,39 @@ class CompanyProfile {
   final String? msicCode;
   final String? msicDescription;
 
-  factory CompanyProfile.fromSupabase(Map<String, dynamic> data) => CompanyProfile(
-        businessName: data['business_name'] as String? ?? 'Kencana Precision Works',
-        sector: data['sector'] as String? ?? 'Precision manufacturing',
-        role: data['role'] as String? ?? 'Factory owner',
+  factory CompanyProfile.fromSupabase(Map<String, dynamic> data) =>
+      CompanyProfile(
+        businessName: data['business_name'] as String? ?? '',
+        sector: data['sector'] as String? ?? '',
+        role: data['role'] as String? ?? '',
         verified: data['verified'] as bool? ?? false,
         msicCode: data['msic_code'] as String?,
         msicDescription: data['msic_description'] as String?,
       );
 
-  CompanyProfile copyWith({String? businessName, String? sector, String? role, bool? verified, String? msicCode, String? msicDescription}) => CompanyProfile(
-        businessName: businessName ?? this.businessName,
-        sector: sector ?? this.sector,
-        role: role ?? this.role,
-        verified: verified ?? this.verified,
-        msicCode: msicCode ?? this.msicCode,
-        msicDescription: msicDescription ?? this.msicDescription,
-      );
+  CompanyProfile copyWith({
+    String? businessName,
+    String? sector,
+    String? role,
+    bool? verified,
+    String? msicCode,
+    String? msicDescription,
+  }) => CompanyProfile(
+    businessName: businessName ?? this.businessName,
+    sector: sector ?? this.sector,
+    role: role ?? this.role,
+    verified: verified ?? this.verified,
+    msicCode: msicCode ?? this.msicCode,
+    msicDescription: msicDescription ?? this.msicDescription,
+  );
 }
 
 class IndustryHubState {
   const IndustryHubState({
     this.profile = const CompanyProfile(),
     this.listings = const [],
-    this.savedMatches = 2,
-    this.negotiations = 1,
+    this.savedMatches = 0,
+    this.negotiations = 0,
     this.isLoading = true,
   });
 
@@ -116,7 +126,8 @@ class IndustryHubState {
   final int negotiations;
   final bool isLoading;
 
-  int get activeListings => listings.where((item) => item.owner == profile.businessName).length;
+  int get activeListings =>
+      listings.where((item) => item.owner == profile.businessName).length;
 
   IndustryHubState copyWith({
     CompanyProfile? profile,
@@ -124,14 +135,13 @@ class IndustryHubState {
     int? savedMatches,
     int? negotiations,
     bool? isLoading,
-  }) =>
-      IndustryHubState(
-        profile: profile ?? this.profile,
-        listings: listings ?? this.listings,
-        savedMatches: savedMatches ?? this.savedMatches,
-        negotiations: negotiations ?? this.negotiations,
-        isLoading: isLoading ?? this.isLoading,
-      );
+  }) => IndustryHubState(
+    profile: profile ?? this.profile,
+    listings: listings ?? this.listings,
+    savedMatches: savedMatches ?? this.savedMatches,
+    negotiations: negotiations ?? this.negotiations,
+    isLoading: isLoading ?? this.isLoading,
+  );
 }
 
 class IndustryHubNotifier extends Notifier<IndustryHubState> {
@@ -146,12 +156,7 @@ class IndustryHubNotifier extends Notifier<IndustryHubState> {
     return const IndustryHubState();
   }
 
-  Future<User?> _ensureSignedInUser() async {
-    final existingUser = _supabase.auth.currentUser;
-    if (existingUser != null) return existingUser;
-    final response = await _supabase.auth.signInAnonymously();
-    return response.user;
-  }
+  Future<User?> _ensureSignedInUser() async => _supabase.auth.currentUser;
 
   Future<void> _loadProfileAndListings() async {
     if (!_disposed) state = state.copyWith(isLoading: true);
@@ -162,8 +167,14 @@ class IndustryHubNotifier extends Notifier<IndustryHubState> {
         return;
       }
 
-      final profileRow = await _supabase.from('profiles').select().eq('user_id', user.id).maybeSingle();
-      final profile = profileRow == null ? const CompanyProfile() : CompanyProfile.fromSupabase(profileRow);
+      final profileRow = await _supabase
+          .from('profiles')
+          .select()
+          .eq('user_id', user.id)
+          .maybeSingle();
+      final profile = profileRow == null
+          ? const CompanyProfile()
+          : CompanyProfile.fromSupabase(profileRow);
 
       if (profileRow == null) {
         await _supabase.from('profiles').insert({
@@ -174,13 +185,27 @@ class IndustryHubNotifier extends Notifier<IndustryHubState> {
         });
       }
 
-      final listingRows = await _supabase.from('listings').select().order('created_at', ascending: false);
+      final listingRows = await _supabase
+          .from('listings')
+          .select()
+          .order('created_at', ascending: false);
       final listings = (listingRows as List)
-          .map((row) => Listing.fromSupabase(Map<String, dynamic>.from(row as Map)))
+          .map(
+            (row) =>
+                Listing.fromSupabase(Map<String, dynamic>.from(row as Map)),
+          )
           .toList();
+      final savedMatches = await _countOwnRows('saved_matches', user.id);
+      final negotiations = await _countOwnRows('fair_price_sessions', user.id);
 
       if (_disposed) return;
-      state = state.copyWith(profile: profile, listings: listings, isLoading: false);
+      state = state.copyWith(
+        profile: profile,
+        listings: listings,
+        savedMatches: savedMatches,
+        negotiations: negotiations,
+        isLoading: false,
+      );
     } catch (error) {
       debugPrint('IndustryHub Supabase load failed: $error');
       if (!_disposed) state = state.copyWith(isLoading: false);
@@ -189,39 +214,76 @@ class IndustryHubNotifier extends Notifier<IndustryHubState> {
 
   Future<void> refreshSupabaseData() => _loadProfileAndListings();
 
-  Future<void> updateProfile({String? businessName, String? sector, String? role, String? msicCode, String? msicDescription}) async {
+  Future<int> _countOwnRows(String table, String userId) async {
+    try {
+      final rows = await _supabase
+          .from(table)
+          .select('id')
+          .eq('user_id', userId);
+      return (rows as List).length;
+    } catch (error) {
+      debugPrint('IndustryHub $table count could not be loaded: $error');
+      return 0;
+    }
+  }
+
+  Future<void> updateProfile({
+    String? businessName,
+    String? sector,
+    String? role,
+    String? msicCode,
+    String? msicDescription,
+  }) async {
     final user = await _ensureSignedInUser();
-    if (user == null) return;
+    if (user == null) throw StateError('Sign in before updating your profile.');
 
     final updatedProfile = state.profile.copyWith(
-      businessName: businessName?.trim().isNotEmpty == true ? businessName!.trim() : null,
+      businessName: businessName?.trim().isNotEmpty == true
+          ? businessName!.trim()
+          : null,
       sector: sector?.trim().isNotEmpty == true ? sector!.trim() : null,
       role: role?.trim().isNotEmpty == true ? role!.trim() : null,
       msicCode: msicCode?.trim().isNotEmpty == true ? msicCode!.trim() : null,
-      msicDescription: msicDescription?.trim().isNotEmpty == true ? msicDescription!.trim() : null,
+      msicDescription: msicDescription?.trim().isNotEmpty == true
+          ? msicDescription!.trim()
+          : null,
     );
 
     try {
-      await _supabase.from('profiles').update({
-        'business_name': updatedProfile.businessName,
-        'sector': updatedProfile.sector,
-        'role': updatedProfile.role,
-        'msic_code': updatedProfile.msicCode,
-        'msic_description': updatedProfile.msicDescription,
-      }).eq('user_id', user.id);
+      await _supabase
+          .from('profiles')
+          .update({
+            'business_name': updatedProfile.businessName,
+            'sector': updatedProfile.sector,
+            'role': updatedProfile.role,
+            'msic_code': updatedProfile.msicCode,
+            'msic_description': updatedProfile.msicDescription,
+          })
+          .eq('user_id', user.id);
 
       var updatedListings = state.listings;
       if (updatedProfile.businessName != state.profile.businessName) {
-        await _supabase.from('listings').update({'owner': updatedProfile.businessName}).eq('owner_id', user.id);
+        await _supabase
+            .from('listings')
+            .update({'owner': updatedProfile.businessName})
+            .eq('owner_id', user.id);
         updatedListings = state.listings
-            .map((listing) => listing.ownerId == user.id ? listing.copyWith(owner: updatedProfile.businessName) : listing)
+            .map(
+              (listing) => listing.ownerId == user.id
+                  ? listing.copyWith(owner: updatedProfile.businessName)
+                  : listing,
+            )
             .toList();
       }
 
       if (_disposed) return;
-      state = state.copyWith(profile: updatedProfile, listings: updatedListings);
+      state = state.copyWith(
+        profile: updatedProfile,
+        listings: updatedListings,
+      );
     } catch (error) {
       debugPrint('IndustryHub Supabase profile update failed: $error');
+      rethrow;
     }
   }
 
@@ -235,7 +297,7 @@ class IndustryHubNotifier extends Notifier<IndustryHubState> {
     double? askingPricePerKg,
   }) async {
     final user = await _ensureSignedInUser();
-    if (user == null) return;
+    if (user == null) throw StateError('Sign in before publishing a listing.');
 
     try {
       final createdRow = await _supabase
@@ -253,34 +315,154 @@ class IndustryHubNotifier extends Notifier<IndustryHubState> {
           })
           .select()
           .single();
-      final listing = Listing.fromSupabase(Map<String, dynamic>.from(createdRow));
+      final listing = Listing.fromSupabase(
+        Map<String, dynamic>.from(createdRow),
+      );
       if (_disposed) return;
       state = state.copyWith(listings: [listing, ...state.listings]);
     } catch (error) {
       debugPrint('IndustryHub Supabase listing creation failed: $error');
+      rethrow;
+    }
+  }
+
+  Future<void> updateListing({
+    required String id,
+    required String type,
+    required String material,
+    required double quantity,
+    required String unit,
+    required String location,
+    required String description,
+    double? askingPricePerKg,
+  }) async {
+    final user = await _ensureSignedInUser();
+    if (user == null) throw StateError('Sign in before updating a listing.');
+
+    try {
+      final updatedRow = await _supabase
+          .from('listings')
+          .update({
+            'type': type,
+            'material': material.trim(),
+            'quantity': quantity,
+            'unit': unit,
+            'location': location.trim(),
+            'description': description.trim(),
+            'asking_price_per_kg': askingPricePerKg,
+          })
+          .eq('id', id)
+          .eq('owner_id', user.id)
+          .select()
+          .single();
+      final updatedListing = Listing.fromSupabase(
+        Map<String, dynamic>.from(updatedRow),
+      );
+      if (_disposed) return;
+      state = state.copyWith(
+        listings: state.listings
+            .map((listing) => listing.id == id ? updatedListing : listing)
+            .toList(),
+      );
+    } catch (error) {
+      debugPrint('IndustryHub Supabase listing update failed: $error');
+      rethrow;
     }
   }
 
   Future<void> removeListing(String id) async {
     final user = await _ensureSignedInUser();
-    if (user == null) return;
+    if (user == null) throw StateError('Sign in before removing a listing.');
 
     try {
-      await _supabase.from('listings').delete().eq('id', id).eq('owner_id', user.id);
+      await _supabase
+          .from('listings')
+          .delete()
+          .eq('id', id)
+          .eq('owner_id', user.id);
       if (_disposed) return;
-      state = state.copyWith(listings: state.listings.where((item) => item.id != id).toList());
+      state = state.copyWith(
+        listings: state.listings.where((item) => item.id != id).toList(),
+      );
     } catch (error) {
       debugPrint('IndustryHub Supabase listing removal failed: $error');
+      rethrow;
     }
   }
 
-  void saveMatch() {
-    state = state.copyWith(savedMatches: state.savedMatches + 1);
+  Future<Set<String>> fetchSavedMatchIds() async {
+    final user = await _ensureSignedInUser();
+    if (user == null) return const <String>{};
+    final rows = await _supabase
+        .from('saved_matches')
+        .select('programme_id')
+        .eq('user_id', user.id);
+    return (rows as List)
+        .map((row) => (row as Map)['programme_id'])
+        .whereType<String>()
+        .toSet();
   }
 
-  void startNegotiation() {
-    state = state.copyWith(negotiations: state.negotiations + 1);
+  Future<void> saveMatch({
+    required String programmeId,
+    required String programmeName,
+    required String provider,
+    required String sourceUrl,
+    required String sourceName,
+  }) async {
+    final user = await _ensureSignedInUser();
+    if (user == null) {
+      throw StateError('Sign in before saving a training match.');
+    }
+
+    await _supabase.from('saved_matches').upsert({
+      'user_id': user.id,
+      'programme_id': programmeId,
+      'programme_name': programmeName,
+      'provider': provider,
+      'source_url': sourceUrl,
+      'source_name': sourceName,
+    }, onConflict: 'user_id,programme_id');
+    final count = await _countOwnRows('saved_matches', user.id);
+    if (!_disposed) state = state.copyWith(savedMatches: count);
+  }
+
+  Future<void> saveNegotiation({
+    required String product,
+    required double quantity,
+    required double proposedPrice,
+    required double floorPrice,
+    required double targetPrice,
+    required double ceilingPrice,
+    required String condition,
+    required String collectionTerms,
+    required String strategy,
+    required bool hasLiveEvidence,
+  }) async {
+    final user = await _ensureSignedInUser();
+    if (user == null) {
+      throw StateError('Sign in before saving a price session.');
+    }
+
+    await _supabase.from('fair_price_sessions').insert({
+      'user_id': user.id,
+      'product': product.trim(),
+      'quantity': quantity,
+      'proposed_price': proposedPrice,
+      'floor_price': floorPrice,
+      'target_price': targetPrice,
+      'ceiling_price': ceilingPrice,
+      'condition': condition,
+      'collection_terms': collectionTerms,
+      'strategy': strategy,
+      'has_live_evidence': hasLiveEvidence,
+    });
+    final count = await _countOwnRows('fair_price_sessions', user.id);
+    if (!_disposed) state = state.copyWith(negotiations: count);
   }
 }
 
-final appStateProvider = NotifierProvider<IndustryHubNotifier, IndustryHubState>(IndustryHubNotifier.new);
+final appStateProvider =
+    NotifierProvider<IndustryHubNotifier, IndustryHubState>(
+      IndustryHubNotifier.new,
+    );

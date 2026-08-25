@@ -7,10 +7,22 @@ class AiService {
     String systemPrompt,
     String userInput,
   ) async {
+    final trimmedSystemPrompt = systemPrompt.trim();
+    final trimmedUserInput = userInput.trim();
+    if (trimmedSystemPrompt.isEmpty || trimmedUserInput.isEmpty) {
+      throw ArgumentError('AI prompts must not be empty.');
+    }
+    final safeSystemPrompt = trimmedSystemPrompt.length > 12000
+        ? trimmedSystemPrompt.substring(0, 12000)
+        : trimmedSystemPrompt;
+    final safeUserInput = trimmedUserInput.length > 20000
+        ? trimmedUserInput.substring(0, 20000)
+        : trimmedUserInput;
+
     try {
       final response = await Supabase.instance.client.functions.invoke(
         'ai-chat',
-        body: {'system_prompt': systemPrompt, 'user_input': userInput},
+        body: {'system_prompt': safeSystemPrompt, 'user_input': safeUserInput},
       );
       if (response.status < 200 || response.status >= 300) {
         throw Exception('AI proxy returned HTTP ${response.status}.');

@@ -33,7 +33,8 @@ class DealRequestRecord {
   final String status;
   final DateTime sentAt;
 
-  factory DealRequestRecord.fromSupabase(Map<String, dynamic> data) => DealRequestRecord(
+  factory DealRequestRecord.fromSupabase(Map<String, dynamic> data) =>
+      DealRequestRecord(
         id: data['id'] as String? ?? '',
         listingId: data['listing_id'] as String? ?? '',
         requesterId: data['requester_id'] as String? ?? '',
@@ -44,19 +45,45 @@ class DealRequestRecord {
         quantity: data['quantity'] as String? ?? '',
         note: data['note'] as String? ?? '',
         status: data['status'] as String? ?? 'REQUEST SENT',
-        sentAt: DateTime.tryParse(data['created_at'] as String? ?? '') ?? DateTime.now(),
+        sentAt:
+            DateTime.tryParse(data['created_at'] as String? ?? '') ??
+            DateTime.now(),
       );
+
+  DealRequestRecord copyWith({String? status}) => DealRequestRecord(
+    id: id,
+    listingId: listingId,
+    requesterId: requesterId,
+    listingOwnerId: listingOwnerId,
+    material: material,
+    owner: owner,
+    location: location,
+    quantity: quantity,
+    note: note,
+    status: status ?? this.status,
+    sentAt: sentAt,
+  );
 }
 
 class DealRequestRepository {
-  DealRequestRepository({SupabaseClient? supabase}) : _supabase = supabase ?? Supabase.instance.client;
+  DealRequestRepository({SupabaseClient? supabase})
+    : _supabase = supabase ?? Supabase.instance.client;
 
   final SupabaseClient _supabase;
 
-  Future<DealRequestRecord> sendRequest({required Listing listing, required String note}) async {
+  Future<DealRequestRecord> sendRequest({
+    required Listing listing,
+    required String note,
+  }) async {
     final user = _supabase.auth.currentUser;
-    if (user == null) throw StateError('You need to be signed in before sending a deal request.');
-    if (listing.ownerId == user.id) throw StateError('You cannot send a request to your own listing.');
+    if (user == null) {
+      throw StateError(
+        'You need to be signed in before sending a deal request.',
+      );
+    }
+    if (listing.ownerId == user.id) {
+      throw StateError('You cannot send a request to your own listing.');
+    }
 
     final createdRow = await _supabase
         .from('deal_requests')
@@ -73,7 +100,9 @@ class DealRequestRepository {
         .select()
         .single();
 
-    return DealRequestRecord.fromSupabase(Map<String, dynamic>.from(createdRow));
+    return DealRequestRecord.fromSupabase(
+      Map<String, dynamic>.from(createdRow),
+    );
   }
 
   Future<List<DealRequestRecord>> fetchOutgoingRequests() async {
@@ -86,7 +115,24 @@ class DealRequestRepository {
         .eq('requester_id', user.id)
         .order('created_at', ascending: false);
     return (rows as List)
-        .map((row) => DealRequestRecord.fromSupabase(Map<String, dynamic>.from(row as Map)))
+        .map(
+          (row) => DealRequestRecord.fromSupabase(
+            Map<String, dynamic>.from(row as Map),
+          ),
+        )
         .toList();
+  }
+
+  Future<void> cancelRequest(String requestId) async {
+    final user = _supabase.auth.currentUser;
+    if (user == null) {
+      throw StateError('Sign in before cancelling a deal request.');
+    }
+
+    await _supabase
+        .from('deal_requests')
+        .update({'status': 'CANCELLED'})
+        .eq('id', requestId)
+        .eq('requester_id', user.id);
   }
 }

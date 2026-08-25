@@ -12,18 +12,19 @@ Future<void> main() async {
 
   final supabaseUrl = dotenv.env['SUPABASE_URL'];
   final supabasePublishableKey = dotenv.env['SUPABASE_PUBLISHABLE_KEY'];
-  if (supabaseUrl == null || supabaseUrl.isEmpty || supabasePublishableKey == null || supabasePublishableKey.isEmpty) {
-    throw StateError('Missing SUPABASE_URL or SUPABASE_PUBLISHABLE_KEY in .env.');
+  if (supabaseUrl == null ||
+      supabaseUrl.isEmpty ||
+      supabasePublishableKey == null ||
+      supabasePublishableKey.isEmpty) {
+    throw StateError(
+      'Missing SUPABASE_URL or SUPABASE_PUBLISHABLE_KEY in .env.',
+    );
   }
 
   await Supabase.initialize(
     url: supabaseUrl,
     publishableKey: supabasePublishableKey,
   );
-
-  if (Supabase.instance.client.auth.currentSession == null) {
-    await Supabase.instance.client.auth.signInAnonymously();
-  }
 
   runApp(const ProviderScope(child: IndustryHubApp()));
 }

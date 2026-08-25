@@ -16,9 +16,9 @@ $$;
 
 create table if not exists public.profiles (
   user_id uuid primary key references auth.users(id) on delete cascade,
-  business_name text not null default 'Kencana Precision Works',
-  sector text not null default 'Precision manufacturing',
-  role text not null default 'Factory owner',
+  business_name text not null,
+  sector text not null,
+  role text not null,
   msic_code text,
   msic_description text,
   verified boolean not null default false,
@@ -40,6 +40,34 @@ create table if not exists public.listings (
   verified boolean not null default false,
   created_at timestamptz not null default timezone('utc', now()),
   updated_at timestamptz not null default timezone('utc', now())
+);
+
+create table if not exists public.saved_matches (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  programme_id text not null,
+  programme_name text not null,
+  provider text not null default '',
+  source_url text not null default '',
+  source_name text not null default '',
+  created_at timestamptz not null default timezone('utc', now()),
+  unique (user_id, programme_id)
+);
+
+create table if not exists public.fair_price_sessions (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  product text not null,
+  quantity numeric(14, 2) not null check (quantity > 0),
+  proposed_price numeric(18, 4) not null check (proposed_price > 0),
+  floor_price numeric(18, 4) not null check (floor_price >= 0),
+  target_price numeric(18, 4) not null check (target_price >= 0),
+  ceiling_price numeric(18, 4) not null check (ceiling_price >= 0),
+  condition text not null,
+  collection_terms text not null,
+  strategy text not null,
+  has_live_evidence boolean not null default false,
+  created_at timestamptz not null default timezone('utc', now())
 );
 
 create table if not exists public.deal_requests (
@@ -184,6 +212,8 @@ alter table public.training_programmes add column if not exists created_at times
 alter table public.training_programmes add column if not exists updated_at timestamptz not null default timezone('utc', now());
 
 create index if not exists listings_owner_id_idx on public.listings(owner_id);
+create index if not exists saved_matches_user_id_idx on public.saved_matches(user_id, created_at desc);
+create index if not exists fair_price_sessions_user_id_idx on public.fair_price_sessions(user_id, created_at desc);
 create index if not exists listings_type_location_idx on public.listings(type, location);
 create index if not exists deal_requests_requester_id_idx on public.deal_requests(requester_id, created_at desc);
 create index if not exists training_programmes_active_idx on public.training_programmes(is_active);
@@ -209,6 +239,8 @@ create trigger training_programmes_set_updated_at before update on public.traini
 for each row execute function public.set_updated_at();
 
 alter table public.profiles enable row level security;
+alter table public.saved_matches enable row level security;
+alter table public.fair_price_sessions enable row level security;
 alter table public.listings enable row level security;
 alter table public.deal_requests enable row level security;
 alter table public.training_programmes enable row level security;
@@ -218,6 +250,20 @@ alter table public.commodity_price_observations enable row level security;
 alter table public.price_index_observations enable row level security;
 alter table public.industry_context_observations enable row level security;
 alter table public.workforce_skill_signals enable row level security;
+
+drop policy if exists saved_matches_select_own on public.saved_matches;
+create policy saved_matches_select_own on public.saved_matches for select to authenticated using (auth.uid() = user_id);
+drop policy if exists saved_matches_insert_own on public.saved_matches;
+create policy saved_matches_insert_own on public.saved_matches for insert to authenticated with check (auth.uid() = user_id);
+drop policy if exists saved_matches_delete_own on public.saved_matches;
+create policy saved_matches_delete_own on public.saved_matches for delete to authenticated using (auth.uid() = user_id);
+
+drop policy if exists fair_price_sessions_select_own on public.fair_price_sessions;
+create policy fair_price_sessions_select_own on public.fair_price_sessions for select to authenticated using (auth.uid() = user_id);
+drop policy if exists fair_price_sessions_insert_own on public.fair_price_sessions;
+create policy fair_price_sessions_insert_own on public.fair_price_sessions for insert to authenticated with check (auth.uid() = user_id);
+drop policy if exists fair_price_sessions_delete_own on public.fair_price_sessions;
+create policy fair_price_sessions_delete_own on public.fair_price_sessions for delete to authenticated using (auth.uid() = user_id);
 
 drop policy if exists profiles_select_own on public.profiles;
 create policy profiles_select_own on public.profiles for select to authenticated using (auth.uid() = user_id);

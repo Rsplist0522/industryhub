@@ -10,6 +10,7 @@ import '../../../app/theme.dart';
 import '../../../core/app_state.dart';
 import '../../../core/services.dart';
 import '../../../core/widgets.dart';
+import '../../../core/validators.dart';
 import '../data/msic_repository.dart';
 
 class ProfileScreen extends ConsumerStatefulWidget {
@@ -207,6 +208,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             ...ownListings.map(
               (listing) => _ListingRow(
                 listing: listing,
+                onEdit: () => _showEditListing(listing),
                 onDelete: () => _confirmRemoveListing(listing),
               ),
             ),
@@ -309,7 +311,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     setState(() => _editing = false);
   }
 
-  void _saveProfile(String originalBusinessName, bool hasListings) {
+  Future<void> _saveProfile(
+    String originalBusinessName,
+    bool hasListings,
+  ) async {
     if (!(_profileFormKey.currentState?.validate() ?? false)) return;
     final businessName = _business.text.trim();
     final sector = _sector.text.trim();
@@ -321,22 +326,34 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       }
     }
 
-    ref
-        .read(appStateProvider.notifier)
-        .updateProfile(
-          businessName: businessName,
-          sector: sector,
-          msicCode: selectedSector?.code,
-          msicDescription: selectedSector?.name,
-        );
-    setState(() => _editing = false);
+    try {
+      await ref
+          .read(appStateProvider.notifier)
+          .updateProfile(
+            businessName: businessName,
+            sector: sector,
+            msicCode: selectedSector?.code,
+            msicDescription: selectedSector?.name,
+          );
+      if (!mounted) return;
+      setState(() => _editing = false);
 
-    final message = hasListings && businessName != originalBusinessName
-        ? 'Profile saved. Existing listings were updated with the new business name.'
-        : 'Profile saved to your workspace.';
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(message)));
+      final message = hasListings && businessName != originalBusinessName
+          ? 'Profile saved. Existing listings were updated with the new business name.'
+          : 'Profile saved to your workspace.';
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(message)));
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Profile could not be saved. Please check your connection and try again.',
+          ),
+        ),
+      );
+    }
   }
 
   Future<void> _showAddListing(BuildContext context) async {
@@ -390,10 +407,14 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                   const SizedBox(height: 12),
                   TextFormField(
                     controller: material,
+                    maxLength: 120,
                     decoration: const InputDecoration(
                       labelText: 'Material or by-product',
                     ),
-                    validator: _requiredText,
+                    validator: (value) => validateRequiredText(
+                      value,
+                      label: 'a material or by-product',
+                    ),
                   ),
                   const SizedBox(height: 12),
                   Row(
@@ -446,8 +467,13 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                   const SizedBox(height: 12),
                   TextFormField(
                     controller: location,
+                    maxLength: 160,
                     decoration: const InputDecoration(labelText: 'Location'),
-                    validator: _requiredText,
+                    validator: (value) => validateRequiredText(
+                      value,
+                      label: 'a location',
+                      maxLength: 160,
+                    ),
                   ),
                   const SizedBox(height: 12),
                   TextFormField(
@@ -505,21 +531,230 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     askingPricePerKg.dispose();
 
     if (draft == null || !mounted) return;
-    await ref
-        .read(appStateProvider.notifier)
-        .addListing(
-          type: draft.type,
-          material: draft.material,
-          quantity: draft.quantity,
-          unit: draft.unit,
-          askingPricePerKg: draft.askingPricePerKg,
-          location: draft.location,
-          description: draft.description,
-        );
-    if (!context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Listing added to ReSource Marketplace.')),
+    try {
+      await ref
+          .read(appStateProvider.notifier)
+          .addListing(
+            type: draft.type,
+            material: draft.material,
+            quantity: draft.quantity,
+            unit: draft.unit,
+            askingPricePerKg: draft.askingPricePerKg,
+            location: draft.location,
+            description: draft.description,
+          );
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Listing added to ReSource Marketplace.')),
+      );
+    } catch (_) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Listing could not be published. Please check your connection and try again.',
+          ),
+        ),
+      );
+    }
+  }
+
+  Future<void> _showEditListing(Listing listing) async {
+    final material = TextEditingController(text: listing.material);
+    final quantity = TextEditingController(text: listing.quantity.toString());
+    final location = TextEditingController(text: listing.location);
+    final description = TextEditingController(text: listing.description);
+    final askingPricePerKg = TextEditingController(
+      text: listing.askingPricePerKg?.toString() ?? '',
     );
+    final formKey = GlobalKey<FormState>();
+    var type = listing.type == 'demand' ? 'demand' : 'supply';
+    var unit = ['kg', 'tonnes', 'pieces'].contains(listing.unit)
+        ? listing.unit
+        : 'kg';
+
+    final draft = await showDialog<_ListingDraft>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Edit resource listing'),
+          content: SingleChildScrollView(
+            child: Form(
+              key: formKey,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  DropdownButtonFormField<String>(
+                    initialValue: type,
+                    decoration: const InputDecoration(
+                      labelText: 'Listing type',
+                    ),
+                    items: const [
+                      DropdownMenuItem(
+                        value: 'supply',
+                        child: Text('I can supply'),
+                      ),
+                      DropdownMenuItem(
+                        value: 'demand',
+                        child: Text('I need to buy'),
+                      ),
+                    ],
+                    onChanged: (value) =>
+                        setDialogState(() => type = value ?? type),
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: material,
+                    maxLength: 120,
+                    decoration: const InputDecoration(
+                      labelText: 'Material or by-product',
+                    ),
+                    validator: (value) => validateRequiredText(
+                      value,
+                      label: 'a material or by-product',
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextFormField(
+                          controller: quantity,
+                          keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true,
+                          ),
+                          decoration: InputDecoration(
+                            labelText: 'Quantity ($unit)',
+                          ),
+                          validator: _positiveQuantity,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: DropdownButtonFormField<String>(
+                          initialValue: unit,
+                          decoration: const InputDecoration(labelText: 'Unit'),
+                          items: const [
+                            DropdownMenuItem(value: 'kg', child: Text('kg')),
+                            DropdownMenuItem(
+                              value: 'tonnes',
+                              child: Text('tonnes'),
+                            ),
+                            DropdownMenuItem(
+                              value: 'pieces',
+                              child: Text('pieces'),
+                            ),
+                          ],
+                          onChanged: (value) =>
+                              setDialogState(() => unit = value ?? unit),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: askingPricePerKg,
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    decoration: const InputDecoration(
+                      labelText: 'Asking price per kg (optional)',
+                    ),
+                    validator: _nonNegativePrice,
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: location,
+                    maxLength: 160,
+                    decoration: const InputDecoration(labelText: 'Location'),
+                    validator: (value) => validateRequiredText(
+                      value,
+                      label: 'a location',
+                      maxLength: 160,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: description,
+                    maxLines: 3,
+                    maxLength: 240,
+                    decoration: const InputDecoration(
+                      labelText:
+                          'Material condition or collection notes (optional)',
+                      alignLabelWithHint: true,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () {
+                if (!(formKey.currentState?.validate() ?? false)) return;
+                Navigator.pop(
+                  dialogContext,
+                  _ListingDraft(
+                    type: type,
+                    material: material.text.trim(),
+                    quantity: double.parse(quantity.text.trim()),
+                    unit: unit,
+                    askingPricePerKg: double.tryParse(
+                      askingPricePerKg.text.trim(),
+                    ),
+                    location: location.text.trim(),
+                    description: description.text.trim(),
+                  ),
+                );
+              },
+              child: const Text('Save changes'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    await Future<void>.delayed(const Duration(milliseconds: 300));
+    material.dispose();
+    quantity.dispose();
+    location.dispose();
+    description.dispose();
+    askingPricePerKg.dispose();
+
+    if (draft == null || !mounted) return;
+    try {
+      await ref
+          .read(appStateProvider.notifier)
+          .updateListing(
+            id: listing.id,
+            type: draft.type,
+            material: draft.material,
+            quantity: draft.quantity,
+            unit: draft.unit,
+            askingPricePerKg: draft.askingPricePerKg,
+            location: draft.location,
+            description: draft.description,
+          );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Listing updated in ReSource Marketplace.'),
+        ),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Listing could not be updated. Please check your connection and try again.',
+          ),
+        ),
+      );
+    }
   }
 
   Future<void> _confirmRemoveListing(Listing listing) async {
@@ -544,31 +779,31 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     );
 
     if (shouldRemove != true || !mounted) return;
-    ref.read(appStateProvider.notifier).removeListing(listing.id);
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Listing removed from ReSource Marketplace.'),
-      ),
-    );
-  }
-
-  String? _requiredText(String? value) =>
-      value == null || value.trim().isEmpty ? 'This field is required.' : null;
-
-  String? _positiveQuantity(String? value) {
-    final amount = double.tryParse(value?.trim() ?? '');
-    if (amount == null || amount <= 0) return 'Enter a quantity above zero.';
-    return null;
-  }
-
-  String? _nonNegativePrice(String? value) {
-    if (value == null || value.trim().isEmpty) return null;
-    final amount = double.tryParse(value.trim());
-    if (amount == null || amount < 0) {
-      return 'Enter a valid non-negative price.';
+    try {
+      await ref.read(appStateProvider.notifier).removeListing(listing.id);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Listing removed from your Supabase workspace.'),
+        ),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Listing could not be removed. Please check your connection and try again.',
+          ),
+        ),
+      );
     }
-    return null;
   }
+
+  String? _positiveQuantity(String? value) =>
+      validatePositiveNumber(value, label: 'quantity');
+
+  String? _nonNegativePrice(String? value) =>
+      validateNonNegativeNumber(value, label: 'price');
 }
 
 class _ListingDraft {
@@ -696,10 +931,10 @@ class _ProfileEditor extends StatelessWidget {
         children: [
           TextFormField(
             controller: business,
+            maxLength: 120,
             decoration: const InputDecoration(labelText: 'Business name'),
-            validator: (value) => value == null || value.trim().isEmpty
-                ? 'Enter a business name.'
-                : null,
+            validator: (value) =>
+                validateRequiredText(value, label: 'a business name'),
           ),
           const SizedBox(height: 12),
           if (isLoadingSectors)
@@ -735,21 +970,20 @@ class _ProfileEditor extends StatelessWidget {
               onChanged: (value) {
                 if (value != null) sector.text = value;
               },
-              validator: (value) => value == null || value.trim().isEmpty
-                  ? 'Choose an industry sector.'
-                  : null,
+              validator: (value) =>
+                  validateRequiredText(value, label: 'an industry sector'),
             )
           else
             TextFormField(
               controller: sector,
+              maxLength: 120,
               decoration: const InputDecoration(
                 labelText: 'Industry sector',
                 helperText:
                     'MSIC catalogue unavailable; enter your sector manually.',
               ),
-              validator: (value) => value == null || value.trim().isEmpty
-                  ? 'Enter an industry sector.'
-                  : null,
+              validator: (value) =>
+                  validateRequiredText(value, label: 'an industry sector'),
             ),
           const SizedBox(height: 12),
           Row(
@@ -844,9 +1078,14 @@ class _ProfileEmptyState extends StatelessWidget {
 }
 
 class _ListingRow extends StatelessWidget {
-  const _ListingRow({required this.listing, required this.onDelete});
+  const _ListingRow({
+    required this.listing,
+    required this.onEdit,
+    required this.onDelete,
+  });
 
   final Listing listing;
+  final VoidCallback onEdit;
   final VoidCallback onDelete;
 
   @override
@@ -869,10 +1108,16 @@ class _ListingRow extends StatelessWidget {
           '${listing.quantity.toStringAsFixed(0)} ${listing.unit} · ${listing.location}\n${isSupply ? 'Supply listing' : 'Demand listing'}${listing.askingPricePerKg == null ? '' : ' · RM ${listing.askingPricePerKg!.toStringAsFixed(2)}/kg'}',
         ),
         isThreeLine: true,
-        trailing: IconButton(
-          onPressed: onDelete,
-          tooltip: 'Remove listing',
-          icon: const Icon(Icons.delete_outline, color: AppColors.rust),
+        trailing: PopupMenuButton<String>(
+          tooltip: 'Listing actions',
+          onSelected: (value) {
+            if (value == 'edit') onEdit();
+            if (value == 'delete') onDelete();
+          },
+          itemBuilder: (context) => const [
+            PopupMenuItem(value: 'edit', child: Text('Edit listing')),
+            PopupMenuItem(value: 'delete', child: Text('Remove listing')),
+          ],
         ),
       ),
     );

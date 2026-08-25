@@ -130,6 +130,7 @@ class _SkillMatchScreenState extends ConsumerState<SkillMatchScreen> {
   ];
 
   bool _isThinking = false;
+  bool _isSavingProgram = false;
   _Requirement? _requirement;
   String? _lastNeedText;
   List<_Program> _programs = const [];
@@ -140,7 +141,21 @@ class _SkillMatchScreenState extends ConsumerState<SkillMatchScreen> {
   @override
   void initState() {
     super.initState();
-    Future<void>.microtask(_loadWorkforceSignal);
+    Future<void>.microtask(() async {
+      await Future.wait([_loadWorkforceSignal(), _loadSavedMatches()]);
+    });
+  }
+
+  Future<void> _loadSavedMatches() async {
+    try {
+      final savedIds = await ref
+          .read(appStateProvider.notifier)
+          .fetchSavedMatchIds();
+      if (!mounted) return;
+      setState(() => _savedProgramIds.addAll(savedIds));
+    } catch (error) {
+      debugPrint('SkillMatch saved matches could not be loaded: $error');
+    }
   }
 
   Future<void> _loadWorkforceSignal() async {
@@ -654,21 +669,37 @@ class _SkillMatchScreenState extends ConsumerState<SkillMatchScreen> {
     return prompts.take(3).toList();
   }
 
-  void _saveProgramme(_Program programme) {
-    if (_savedProgramIds.contains(programme.id)) {
+  Future<void> _saveProgramme(_Program programme) async {
+    if (_savedProgramIds.contains(programme.id) || _isSavingProgram) return;
+
+    setState(() => _isSavingProgram = true);
+    try {
+      await ref
+          .read(appStateProvider.notifier)
+          .saveMatch(
+            programmeId: programme.id,
+            programmeName: programme.name,
+            provider: programme.provider,
+            sourceUrl: programme.sourceUrl,
+            sourceName: programme.sourceName,
+          );
+      if (!mounted) return;
+      setState(() => _savedProgramIds.add(programme.id));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('${programme.name} saved to your profile.')),
+      );
+    } catch (_) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('This programme is already saved to your profile.'),
+          content: Text(
+            'The training match could not be saved. Please check your connection and try again.',
+          ),
         ),
       );
-      return;
+    } finally {
+      if (mounted) setState(() => _isSavingProgram = false);
     }
-
-    setState(() => _savedProgramIds.add(programme.id));
-    ref.read(appStateProvider.notifier).saveMatch();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('${programme.name} saved to your profile.')),
-    );
   }
 
   Future<void> _resetConversation() async {
@@ -1104,7 +1135,7 @@ class _ProgramCard extends StatelessWidget {
 
   final _Program programme;
   final bool isSaved;
-  final VoidCallback onSave;
+  final Future<void> Function() onSave;
 
   @override
   Widget build(BuildContext context) {
@@ -1216,7 +1247,9 @@ class _ProgramCard extends StatelessWidget {
                         ),
                       )
                     : TextButton.icon(
-                        onPressed: onSave,
+                        onPressed: () {
+                          onSave();
+                        },
                         icon: const Icon(Icons.bookmark_add_outlined, size: 17),
                         label: const Text('Save'),
                       ),

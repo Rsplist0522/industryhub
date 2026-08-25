@@ -29,7 +29,7 @@ A single OpenAI-compatible configuration is shared by the AI-enabled modules. **
 The Flutter app’s local `.env` contains only the public Supabase URL and publishable key. Configure the private AI provider as Supabase Edge Function secrets and deploy the included proxy:
 
 ```bash
-supabase secrets set AI_API_KEY=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 AI_BASE_URL=https://api.groq.com/openai/v1 AI_MODEL=llama-3.3-70b-versatile
+supabase secrets set AI_API_KEY=your-provider-key AI_BASE_URL=https://api.openai.com/v1 AI_MODEL=gpt-4o-mini
 supabase functions deploy ai-chat
 ```
 
