@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 
 import 'package:industryhub/core/app_state.dart';
+import 'package:industryhub/features/fair_price/data/market_price_repository.dart';
 import 'package:industryhub/features/resource_marketplace/data/industrial_context_repository.dart';
 import 'package:industryhub/features/skill_match/data/training_programme_repository.dart';
 
@@ -46,6 +47,20 @@ void main() {
       expect(programme.durationDays, 4);
       expect(programme.sourceUrl, 'https://example.com/course-1');
     });
+  });
+
+  test('parses the newest official data.gov.my PPI record', () {
+    final result = parseDataGovPpiResponse(
+      jsonEncode([
+        {'date': '2024-01-01', 'index': 100.0, 'series': 'abs'},
+        {'date': '2024-03-01', 'index': 102.5, 'series': 'abs'},
+        {'date': '2024-03-01', 'index': 999.0, 'series': 'other'},
+      ]),
+    );
+
+    expect(result?.indexValue, 102.5);
+    expect(result?.sourceUrl, 'https://data.gov.my/data-catalogue/ppi');
+    expect(result?.sourceName, contains('data.gov.my'));
   });
 
   test(

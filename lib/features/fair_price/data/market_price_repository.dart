@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -95,6 +97,31 @@ class LocalListingPrice {
       );
 }
 
+PriceIndexObservation? parseDataGovPpiResponse(String body) {
+  final decoded = jsonDecode(body);
+  if (decoded is! List) return null;
+  PriceIndexObservation? latest;
+  for (final raw in decoded) {
+    if (raw is! Map) continue;
+    final row = Map<String, dynamic>.from(raw);
+    if (row['series'] != 'abs') continue;
+    final observedOn = DateTime.tryParse('${row['date'] ?? ''}');
+    final value = (row['index'] as num?)?.toDouble();
+    if (observedOn == null || value == null || !value.isFinite) continue;
+    if (latest == null || observedOn.isAfter(latest.observedOn)) {
+      latest = PriceIndexObservation(
+        series: 'abs',
+        observedOn: observedOn,
+        indexValue: value,
+        baseYear: 2010,
+        sourceName: 'Department of Statistics Malaysia via data.gov.my',
+        sourceUrl: 'https://data.gov.my/data-catalogue/ppi',
+      );
+    }
+  }
+  return latest;
+}
+
 class MarketPriceRepository {
   MarketPriceRepository({SupabaseClient? supabase, http.Client? client})
     : _supabase = supabase ?? Supabase.instance.client,
@@ -154,9 +181,31 @@ class MarketPriceRepository {
         );
       }
     } catch (_) {
-      // The public DOSM CSV below is the read-only fallback.
+      // Continue to the direct public data.gov.my request.
+    }
+    try {
+      final dataGovRecord = await _fetchLatestMalaysiaPpiFromDataGovMy();
+      if (dataGovRecord != null) return dataGovRecord;
+    } catch (_) {
+      // Continue to the DOSM CSV fallback if the catalogue is unavailable.
     }
     return _fetchLatestMalaysiaPpiFromPublicCsv();
+  }
+
+  Future<PriceIndexObservation?> _fetchLatestMalaysiaPpiFromDataGovMy() async {
+    final response = await _client
+        .get(
+          Uri.https('api.data.gov.my', '/data-catalogue', {
+            'id': 'ppi',
+            'limit': '10000',
+          }),
+        )
+        .timeout(const Duration(seconds: 12));
+    if (response.statusCode != 200) {
+      throw StateError('data.gov.my PPI returned HTTP ${response.statusCode}.');
+    }
+
+    return parseDataGovPpiResponse(response.body);
   }
 
   Future<PriceIndexObservation?> _fetchLatestMalaysiaPpiFromPublicCsv() async {

@@ -9,7 +9,7 @@ IndustryHub is a Flutter workspace for Malaysian industrial SMEs. It brings work
 | **SkillMatch** | Turn a plain-language career or workforce need into a structured brief, rank live Supabase course records, show DOSM workforce context, and open a generated live Coursera search when no matching record is synced. No seeded course catalogue is bundled. |
 | **FairPrice** | Select a material, load live marketplace asking-price evidence and DOSM/FRED context, then use a user-driven AI negotiation chat. No comparable asking-price band is shown when evidence is unavailable. |
 | **ReSource Profile** | Maintain a business identity using DOSM MSIC context, publish supply or demand listings, and ask the AI Profile Advisor for profile-readiness and resource recommendations. |
-| **ReSource Marketplace** | Search, filter, sort, and review industrial listings; ask the AI Marketplace Advisor; send structured deal requests, cancel outgoing requests, and review request history. |
+| **ReSource Marketplace** | Search, filter, sort, and review industrial listings; view data.gov.my state-manufacturing context; ask the AI Marketplace Advisor; send structured deal requests, cancel outgoing requests, and review request history. The empty state can load three clearly labelled presentation examples into the signed-in workspace. |
 
 ## Getting started
 
@@ -69,7 +69,9 @@ SUPABASE_URL=https://your-project.supabase.co dart run scripts/ingest_live_data.
 SUPABASE_URL=https://your-project.supabase.co SUPABASE_SERVICE_ROLE_KEY=your-service-role-key dart run scripts/ingest_live_data.dart --course-query "software engineering"
 ```
 
-The importer crawls the public Coursera search page for real course URLs, reads DOSM `lfs_qtr_sru_age` workforce signals, MSIC and PPI data from data.gov.my, and reads public FRED metal-index CSVs. Keep `SUPABASE_SERVICE_ROLE_KEY` out of the Flutter app and out of Git. If a public source is temporarily unavailable, the importer reports the failed source instead of inserting fake seed data. If your existing tables use different required column names or types, review those differences before running the migrations. Re-run the importer whenever you want to refresh live records; the app itself does not invent replacement courses or price observations when the tables are empty.
+The importer crawls the public Coursera search page for real course URLs, reads DOSM `lfs_qtr_sru_age` workforce signals, MSIC and PPI data from data.gov.my, and reads public FRED metal-index CSVs. The runtime clients also directly use data.gov.my for M1 workforce fallback, M2 PPI fallback, M3 MSIC fallback, and M4 state-manufacturing context. Keep `SUPABASE_SERVICE_ROLE_KEY` out of the Flutter app and out of Git. If a public source is temporarily unavailable, the importer reports the failed source instead of inserting fake seed data. If your existing tables use different required column names or types, review those differences before running the migrations. Re-run the importer whenever you want to refresh live records; the app itself does not invent replacement courses or price observations when the tables are empty.
+
+For a strong M4 presentation, sign in and open **ReSource Marketplace** with an empty workspace. Select **Load presentation examples**. IndustryHub creates three idempotent, clearly labelled `[PRESENTATION SAMPLE]` records—aluminium supply in Pulau Pinang, an HDPE demand request in Selangor, and copper supply in Johor—under the current authenticated user. They are visibly marked `DEMO SAMPLE` and are not official data.gov.my records. Replace or delete them before production use.
 
 For production use, review the included Row Level Security policies and use Supabase email/password authentication. The visible profile readiness label is not formal government or third-party verification. The app now requires a signed-in user before loading or mutating workspace records.
 

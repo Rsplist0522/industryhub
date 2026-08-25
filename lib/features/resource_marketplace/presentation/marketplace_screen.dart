@@ -62,6 +62,7 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
   String? _industrialContextError;
   String? _marketplaceAiAnswer;
   bool _isMarketplaceAiThinking = false;
+  bool _isLoadingPresentationListings = false;
   String _industrialContextLocation = 'Malaysia';
   String _selectedOfficialContextState = 'Pulau Pinang';
 
@@ -158,6 +159,33 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
             'Official industry data is temporarily unavailable.';
       });
       debugPrint('Marketplace industry context could not be loaded: $error');
+    }
+  }
+
+  Future<void> _loadPresentationListings() async {
+    if (_isLoadingPresentationListings) return;
+    setState(() => _isLoadingPresentationListings = true);
+    try {
+      final created = await ref
+          .read(appStateProvider.notifier)
+          .createPresentationListings();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            created == 0
+                ? 'Presentation examples are already loaded.'
+                : '$created clearly labelled presentation listings added to your workspace.',
+          ),
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not load presentation listings: $error')),
+      );
+    } finally {
+      if (mounted) setState(() => _isLoadingPresentationListings = false);
     }
   }
 
@@ -493,11 +521,17 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
           ),
           const SizedBox(height: 10),
           if (sourceListings.isEmpty)
-            const _MarketplaceEmptyState(
+            _MarketplaceEmptyState(
               icon: Icons.inventory_2_outlined,
               title: 'The exchange is waiting for its first listing.',
               description:
-                  'Add a supply or demand listing from your ReSource profile to make materials discoverable here.',
+                  'Create a real listing from ReSource Profile, or load clearly labelled presentation examples to demonstrate M4 without pretending they are verified market records.',
+              actionLabel: _isLoadingPresentationListings
+                  ? 'Loading examples…'
+                  : 'Load presentation examples',
+              onAction: _isLoadingPresentationListings
+                  ? null
+                  : _loadPresentationListings,
             )
           else if (listings.isEmpty)
             _MarketplaceEmptyState(
@@ -1340,6 +1374,9 @@ class _MarketplaceCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isSupply = listing.type == 'supply';
+    final isPresentationSample = listing.description.startsWith(
+      '[PRESENTATION SAMPLE]',
+    );
     final color = isSupply ? AppColors.green : AppColors.rust;
     return Card(
       margin: const EdgeInsets.only(bottom: 10),
@@ -1357,6 +1394,13 @@ class _MarketplaceCard extends StatelessWidget {
                     label: isSupply ? 'SUPPLY' : 'DEMAND',
                     color: color,
                   ),
+                  if (isPresentationSample) ...[
+                    const SizedBox(width: 6),
+                    const StatusChip(
+                      label: 'DEMO SAMPLE',
+                      color: AppColors.amber,
+                    ),
+                  ],
                   const Spacer(),
                   if (requested)
                     const Icon(

@@ -287,6 +287,71 @@ class IndustryHubNotifier extends Notifier<IndustryHubState> {
     }
   }
 
+  Future<int> createPresentationListings() async {
+    final user = await _ensureSignedInUser();
+    if (user == null) {
+      throw StateError('Sign in before loading presentation listings.');
+    }
+
+    final existingRows = await _supabase
+        .from('listings')
+        .select('id')
+        .eq('owner_id', user.id)
+        .ilike('description', '[PRESENTATION SAMPLE]%');
+    if ((existingRows as List).isNotEmpty) return 0;
+
+    final owner = state.profile.businessName.trim().isEmpty
+        ? 'Presentation Demo Partner'
+        : state.profile.businessName.trim();
+    final rows = await _supabase.from('listings').insert([
+      {
+        'type': 'supply',
+        'material': 'Aluminium machining offcuts',
+        'quantity': 1200,
+        'unit': 'kg',
+        'location': 'Pulau Pinang',
+        'description':
+            '[PRESENTATION SAMPLE] Sorted, dry aluminium machining offcuts; collection-ready in 7 days. Replace this sample with your real supply record before production.',
+        'asking_price_per_kg': 12.80,
+        'owner': owner,
+        'owner_id': user.id,
+      },
+      {
+        'type': 'demand',
+        'material': 'Recycled HDPE pellets',
+        'quantity': 800,
+        'unit': 'kg',
+        'location': 'Selangor',
+        'description':
+            '[PRESENTATION SAMPLE] Buyer seeking consistent recycled HDPE pellets for injection-moulding production. Confirm grade, colour, and delivery terms before agreement.',
+        'asking_price_per_kg': null,
+        'owner': owner,
+        'owner_id': user.id,
+      },
+      {
+        'type': 'supply',
+        'material': 'Copper wire granules',
+        'quantity': 600,
+        'unit': 'kg',
+        'location': 'Johor',
+        'description':
+            '[PRESENTATION SAMPLE] Clean copper wire granules with batch photos available on request. Replace this sample with a verified business listing before production.',
+        'asking_price_per_kg': 26.50,
+        'owner': owner,
+        'owner_id': user.id,
+      },
+    ]).select();
+    final createdListings = (rows as List)
+        .map(
+          (row) => Listing.fromSupabase(Map<String, dynamic>.from(row as Map)),
+        )
+        .toList();
+    if (!_disposed) {
+      state = state.copyWith(listings: [...createdListings, ...state.listings]);
+    }
+    return createdListings.length;
+  }
+
   Future<void> addListing({
     required String type,
     required String material,
