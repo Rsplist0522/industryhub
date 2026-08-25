@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -7,19 +8,27 @@ import 'app/theme.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  const supabaseUrl = String.fromEnvironment('SUPABASE_URL');
-  const supabasePublishableKey = String.fromEnvironment(
-    'SUPABASE_PUBLISHABLE_KEY',
-  );
-  if (supabaseUrl.isEmpty || supabasePublishableKey.isEmpty) {
+  await dotenv.load(fileName: '.env', isOptional: false);
+
+  final supabaseUrl = dotenv.env['SUPABASE_URL'];
+  final supabasePublishableKey = dotenv.env['SUPABASE_PUBLISHABLE_KEY'];
+  if (supabaseUrl == null ||
+      supabaseUrl.isEmpty ||
+      supabasePublishableKey == null ||
+      supabasePublishableKey.isEmpty) {
     throw StateError(
-      'Missing Supabase configuration. Run with --dart-define=SUPABASE_URL=... and --dart-define=SUPABASE_PUBLISHABLE_KEY=...',
+      'Missing SUPABASE_URL or SUPABASE_PUBLISHABLE_KEY in .env.',
     );
   }
 
   await Supabase.initialize(
     url: supabaseUrl,
     publishableKey: supabasePublishableKey,
+    authOptions: const FlutterAuthClientOptions(
+      autoRefreshToken: true,
+      persistSession: true,
+      detectSessionInUri: true,
+    ),
   );
 
   runApp(const ProviderScope(child: IndustryHubApp()));

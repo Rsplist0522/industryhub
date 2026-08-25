@@ -13,22 +13,18 @@ IndustryHub is a Flutter workspace for Malaysian industrial SMEs. It brings work
 
 ## Getting started
 
-Install the Flutter SDK, then run:
+Install the Flutter SDK, copy `.env.example` to `.env`, and put your public Supabase URL and publishable key into `.env`:
 
 ```powershell
+Copy-Item .env.example .env
+notepad .env
 flutter pub get
-flutter run -d web-server --web-port 8080 --dart-define=SUPABASE_URL=https://your-project.supabase.co --dart-define=SUPABASE_PUBLISHABLE_KEY=your-publishable-or-anon-key
+flutter run
 ```
 
-The Flutter client reads `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY` through compile-time `--dart-define` values. Do not add `.env` to Flutter assets and do not commit private keys. For a release build, pass the same two values to `flutter build web --release`.
+The actual `.env` file is ignored by Git. It contains only the public Supabase URL and publishable key required by the Flutter client. Do not add private AI or service-role keys to it. The application loads `.env` automatically, so the normal command is simply `flutter run` from the project root. Android Studio Flutter configurations also work without extra run arguments. For a release Web or Android build, keep `.env` in the project root while building; it is public client configuration, not a place for private server secrets.
 
-For Windows PowerShell, the run command is:
-
-```powershell
-flutter run -d web-server --web-port 8080 --dart-define=SUPABASE_URL=https://your-project.supabase.co --dart-define=SUPABASE_PUBLISHABLE_KEY=your-publishable-or-anon-key
-```
-
-The private AI key does **not** belong in the Flutter client. When configured, the shared AI service is actively used by **SkillMatch** to structure career/workforce requests, **FairPrice** to generate user-driven negotiation dialogue, **ReSource Profile** to generate profile-advisor guidance, and **ReSource Marketplace** to compare visible listings. If the AI service is unavailable, the app labels that state explicitly rather than pretending a local response is AI. Supabase remains required for the application bootstrap and for persisted profile, listing, saved-match, FairPrice, market-signal, programme, workforce-signal, and deal-request records.
+The private AI key does **not** belong in the Flutter `.env` file. When configured, the shared AI service is actively used by **SkillMatch** to structure career/workforce requests, **FairPrice** to generate user-driven negotiation dialogue, **ReSource Profile** to generate profile-advisor guidance, and **ReSource Marketplace** to compare visible listings. Supabase Flutter is configured with persistent sessions and automatic token refresh, so the app restores the signed-in user after a Web refresh or Android restart unless the user signs out, the session expires, or app storage is cleared. If the AI service is unavailable, the app labels that state explicitly rather than pretending a local response is AI. Supabase remains required for the application bootstrap and for persisted profile, listing, saved-match, FairPrice, market-signal, programme, workforce-signal, and deal-request records.
 
 After linking your Supabase project, configure the AI provider as Edge Function secrets and deploy the proxy:
 

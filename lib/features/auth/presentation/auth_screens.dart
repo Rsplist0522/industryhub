@@ -17,9 +17,19 @@ class _SplashScreenState extends State<SplashScreen> {
   @override
   void initState() {
     super.initState();
-    Future<void>.delayed(const Duration(milliseconds: 900), () {
-      if (mounted) context.go('/login');
-    });
+    _restoreSession();
+  }
+
+  Future<void> _restoreSession() async {
+    await Future<void>.delayed(const Duration(milliseconds: 900));
+    if (!mounted) return;
+    var hasSession = false;
+    try {
+      hasSession = Supabase.instance.client.auth.currentSession != null;
+    } catch (_) {
+      // Widget tests or an interrupted bootstrap are treated as signed out.
+    }
+    if (mounted) context.go(hasSession ? '/home' : '/login');
   }
 
   @override
