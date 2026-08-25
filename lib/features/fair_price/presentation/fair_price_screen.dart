@@ -5,6 +5,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../../app/theme.dart';
 import '../../../core/app_state.dart';
@@ -129,6 +130,23 @@ class _FairPriceScreenState extends ConsumerState<FairPriceScreen> {
     'Verified grade',
   ];
   static const _collectionTerms = ['Buyer collects', 'Seller delivers'];
+  static const _documentationLinks = <(String, String, String)>[
+    (
+      'DOSM Price Producer Index',
+      'Malaysia’s official producer-price context for local negotiation evidence.',
+      'https://data.gov.my/data-catalogue/ppi',
+    ),
+    (
+      'DOSM Labour Force and skills data',
+      'Official workforce indicators used as context when available.',
+      'https://data.gov.my/data-catalogue/lfs_qtr_sru_age',
+    ),
+    (
+      'FRED producer-price index series',
+      'Public international material-price context used as optional evidence.',
+      'https://fred.stlouisfed.org/',
+    ),
+  ];
 
   @override
   void initState() {
@@ -232,7 +250,7 @@ class _FairPriceScreenState extends ConsumerState<FairPriceScreen> {
 
     try {
       final response = await _aiService.callAI(
-        'You are FairPrice, a negotiation assistant for Malaysian industrial SMEs. Continue the conversation using only the supplied scenario and transparent range. Never claim a live quote, never invent a buyer or supplier, and never guarantee a price. Return exactly these JSON keys: buyer_message, recommended_strategy, counter_offer_rm_per_kg (number or null), risk_flags (array of concise strings).',
+        'You are FairPrice, a negotiation assistant for Malaysian industrial SMEs. Continue the conversation using only the supplied scenario, transparent range, conversation history, and evidence-library references. Answer the latest user message directly. Do not repeat a previous answer unless the user asks for a recap; if the user asks for documentation, name the relevant source and URL from the supplied references. Never claim a live quote, never invent a buyer or supplier, and never guarantee a price. Return exactly these JSON keys: buyer_message, recommended_strategy, counter_offer_rm_per_kg (number or null), risk_flags (array of concise strings).',
         _followUpPrompt(result, text),
       );
       if (!mounted) return;
@@ -253,8 +271,8 @@ class _FairPriceScreenState extends ConsumerState<FairPriceScreen> {
       setState(() {
         _isChatThinking = false;
         _chatMessages.add(
-          const _PriceChatLine(
-            'I could not respond right now. Check the AI Edge Function configuration and try again.',
+          _PriceChatLine(
+            'AI response unavailable. ${describeAiError(error)}',
             false,
           ),
         );
@@ -264,8 +282,9 @@ class _FairPriceScreenState extends ConsumerState<FairPriceScreen> {
   }
 
   String _followUpPrompt(_NegotiationResult result, String message) {
-    final history = _chatMessages
-        .take(8)
+    final start = _chatMessages.length > 8 ? _chatMessages.length - 8 : 0;
+    final recentHistory = _chatMessages.sublist(start);
+    final history = recentHistory
         .map((line) => '${line.isUser ? 'User' : 'Assistant'}: ${line.text}')
         .join('\n');
     return '''
@@ -275,8 +294,11 @@ ${_negotiationPrompt(result)}
 Conversation:
 $history
 
-New user message:
+Current conversation turn: $_round
+New user message (answer this directly):
 $message
+
+Do not repeat an earlier answer. If the user changes topic, respond to the new topic.
 ''';
   }
 
@@ -290,6 +312,10 @@ Condition: $_condition
 Collection terms: $_collection
 Reference adjustments: ${result.adjustments.join(' ')}
 External context loaded: ${_materialIndexSignal?.series ?? 'No material-specific price index'}; Malaysia PPI ${_ppiSignal?.indexValue.toStringAsFixed(1) ?? 'unavailable'}; local Supabase listing observations ${_localListingPrices.length}.
+Evidence library:
+- DOSM PPI: https://data.gov.my/data-catalogue/ppi
+- DOSM Labour Force and skills: https://data.gov.my/data-catalogue/lfs_qtr_sru_age
+- FRED: https://fred.stlouisfed.org/
 ''';
 
   _AiNegotiationAdvice _adviceFromAi(
@@ -451,6 +477,19 @@ External context loaded: ${_materialIndexSignal?.series ?? 'No material-specific
   }
 
   double _roundToFiftySen(double value) => (value * 2).round() / 2;
+
+  Future<void> _openDocumentation(String url) async {
+    final uri = Uri.tryParse(url);
+    if (uri == null ||
+        !await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('The documentation link could not be opened.'),
+        ),
+      );
+    }
+  }
 
   Future<void> _saveRecommendation() async {
     final result = _result;
@@ -759,6 +798,11 @@ External context loaded: ${_materialIndexSignal?.series ?? 'No material-specific
               isSaving: _isSavingRecommendation,
               onSave: _saveRecommendation,
             ),
+            const SizedBox(height: 14),
+            _DocumentationCard(
+              links: _documentationLinks,
+              onOpen: _openDocumentation,
+            ),
             const SizedBox(height: 24),
             const SpecDivider(label: 'CHAT WITH FAIRPRICE'),
             const SizedBox(height: 12),
@@ -1035,6 +1079,56 @@ class _FairPriceComposer extends StatelessWidget {
                 : const Icon(Icons.send_outlined),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _DocumentationCard extends StatelessWidget {
+  const _DocumentationCard({required this.links, required this.onOpen});
+
+  final List<(String, String, String)> links;
+  final Future<void> Function(String url) onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 14, 8, 8),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Eyebrow('EVIDENCE LIBRARY'),
+            const SizedBox(height: 6),
+            Text(
+              'Use the source material behind the negotiation conversation.',
+              style: Theme.of(context).textTheme.titleSmall,
+            ),
+            const SizedBox(height: 4),
+            const Text(
+              'FairPrice can explain the scenario, while these official references let you verify the underlying context.',
+              style: TextStyle(
+                color: AppColors.slate,
+                fontSize: 12,
+                height: 1.35,
+              ),
+            ),
+            const SizedBox(height: 6),
+            ...links.map(
+              (link) => ListTile(
+                contentPadding: EdgeInsets.zero,
+                dense: true,
+                leading: const Icon(Icons.menu_book_outlined, size: 20),
+                title: Text(link.$1),
+                subtitle: Text(link.$2),
+                trailing: const Icon(Icons.open_in_new, size: 18),
+                onTap: () {
+                  onOpen(link.$3);
+                },
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

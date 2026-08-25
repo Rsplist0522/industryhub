@@ -213,7 +213,7 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
       setState(() {
         _isMarketplaceAiThinking = false;
         _marketplaceAiAnswer =
-            'The Marketplace AI advisor is unavailable. Check the AI service configuration and try again.';
+            'Marketplace AI unavailable. ${describeAiError(error)}';
       });
       debugPrint('Marketplace AI review failed: $error');
     }

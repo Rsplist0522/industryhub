@@ -30,8 +30,8 @@ serve(async (request) => {
   const userInput = typeof payload.user_input === "string" ? payload.user_input.trim().slice(0, 20000) : "";
   if (!systemPrompt || !userInput) return jsonResponse({ error: "system_prompt and user_input are required." }, 400);
 
-  const baseUrl = (Deno.env.get("AI_BASE_URL") ?? "https://api.openai.com/v1").replace(/\/$/, "");
-  const model = Deno.env.get("AI_MODEL") ?? "gpt-4o-mini";
+  const baseUrl = (Deno.env.get("AI_BASE_URL") ?? "https://api.groq.com/openai/v1").replace(/\/$/, "");
+  const model = Deno.env.get("AI_MODEL") ?? "openai/gpt-oss-20b";
 
   try {
     const upstream = await fetch(`${baseUrl}/chat/completions`, {
@@ -42,7 +42,7 @@ serve(async (request) => {
       },
       body: JSON.stringify({
         model,
-        temperature: 0.2,
+        temperature: 0.35,
         response_format: { type: "json_object" },
         messages: [
           { role: "system", content: `${systemPrompt} Return JSON only. Do not use markdown fences or a preamble.` },
@@ -52,7 +52,32 @@ serve(async (request) => {
     });
 
     const raw = await upstream.text();
-    if (!upstream.ok) return jsonResponse({ error: `AI provider returned HTTP ${upstream.status}.` }, 502);
+    if (!upstream.ok) {
+      let providerMessage = raw.replace(/\s+/g, ' ').trim().slice(0, 500);
+      try {
+        const providerJson = JSON.parse(raw) as { error?: { message?: unknown } | string };
+        const errorValue = providerJson.error;
+        providerMessage = typeof errorValue === 'string'
+          ? errorValue
+          : errorValue && typeof errorValue === 'object' && 'message' in errorValue
+            ? String(errorValue.message)
+            : providerMessage;
+      } catch (_) {
+        // Keep the bounded plain-text response when the provider is not JSON.
+      }
+      console.error('AI provider rejected the request', {
+        status: upstream.status,
+        baseUrl,
+        model,
+        providerMessage,
+      });
+      return jsonResponse({
+        error: `AI provider returned HTTP ${upstream.status}.`,
+        provider_message: providerMessage || 'The provider did not return an error message.',
+        provider_base_url: baseUrl,
+        provider_model: model,
+      }, 502);
+    }
 
     const decoded = JSON.parse(raw) as { choices?: Array<{ message?: { content?: unknown } }> };
     const content = decoded.choices?.[0]?.message?.content;

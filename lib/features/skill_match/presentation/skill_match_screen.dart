@@ -188,6 +188,7 @@ class _SkillMatchScreenState extends ConsumerState<SkillMatchScreen> {
     _scrollToBottom();
 
     Map<String, dynamic> aiResponse;
+    Object? aiError;
     var aiAvailable = true;
     try {
       final signalContext = _workforceSkillSignal == null
@@ -199,6 +200,7 @@ class _SkillMatchScreenState extends ConsumerState<SkillMatchScreen> {
       );
     } catch (error) {
       aiAvailable = false;
+      aiError = error;
       debugPrint('SkillMatch AI call unavailable: $error');
       aiResponse = const {'__source': 'unavailable'};
     }
@@ -221,10 +223,10 @@ class _SkillMatchScreenState extends ConsumerState<SkillMatchScreen> {
           ? (aiResponse['assistant_message'] as String).trim()
           : aiAvailable
           ? 'I created a ${requirement.intent.toLowerCase()} brief for a ${requirement.role.toLowerCase()} and ranked ${ranking.programmes.length} relevant programme options.'
-          : 'The AI assistant is unavailable, so I used only the words in your message. Configure the SkillMatch AI proxy for conversational recommendations.';
+          : 'The AI assistant is unavailable, so I used only the words in your message. ${describeAiError(aiError ?? 'Unknown AI error')}';
       final sourceLabel = aiAvailable
           ? 'AI-assisted brief.'
-          : 'AI unavailable; local parsing only.';
+          : 'AI unavailable; local parsing only. ${describeAiError(aiError ?? 'Unknown AI error')}';
       _messages.add(
         _ChatLine(
           '$assistantMessage $sourceLabel Review the brief, then open the live course links that fit your goal.',

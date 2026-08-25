@@ -15,28 +15,29 @@ IndustryHub is a Flutter workspace for Malaysian industrial SMEs. It brings work
 
 Install the Flutter SDK, then run:
 
-```bash
+```powershell
 flutter pub get
-flutter run
+flutter run -d web-server --web-port 8080 --dart-define=SUPABASE_URL=https://your-project.supabase.co --dart-define=SUPABASE_PUBLISHABLE_KEY=your-publishable-or-anon-key
 ```
 
-The app expects a local, untracked `.env` file in the project root with the following values:
+The Flutter client reads `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY` through compile-time `--dart-define` values. Do not add `.env` to Flutter assets and do not commit private keys. For a release build, pass the same two values to `flutter build web --release`.
 
-```env
-SUPABASE_URL=https://your-project.supabase.co
-SUPABASE_PUBLISHABLE_KEY=your-publishable-or-anon-key
+For Windows PowerShell, the run command is:
+
+```powershell
+flutter run -d web-server --web-port 8080 --dart-define=SUPABASE_URL=https://your-project.supabase.co --dart-define=SUPABASE_PUBLISHABLE_KEY=your-publishable-or-anon-key
 ```
 
-The private AI key does **not** belong in the Flutter `.env` file. When configured, the shared AI service is actively used by **SkillMatch** to structure career/workforce requests, **FairPrice** to generate user-driven negotiation dialogue, and **ReSource Profile** to generate profile-advisor guidance. If the AI service is unavailable, the app does not label local text as AI: M1 shows local parsing plus an explicit setup message, while M2 and M3 show an explicit unavailable message. Supabase remains required for the current application bootstrap and for persisted profile, listing, market-signal, programme, workforce-signal, and deal-request records.
+The private AI key does **not** belong in the Flutter client. When configured, the shared AI service is actively used by **SkillMatch** to structure career/workforce requests, **FairPrice** to generate user-driven negotiation dialogue, **ReSource Profile** to generate profile-advisor guidance, and **ReSource Marketplace** to compare visible listings. If the AI service is unavailable, the app labels that state explicitly rather than pretending a local response is AI. Supabase remains required for the application bootstrap and for persisted profile, listing, saved-match, FairPrice, market-signal, programme, workforce-signal, and deal-request records.
 
 After linking your Supabase project, configure the AI provider as Edge Function secrets and deploy the proxy:
 
 ```bash
-supabase secrets set AI_API_KEY=your-api-key AI_BASE_URL=https://api.openai.com/v1 AI_MODEL=gpt-4o-mini
-supabase functions deploy ai-chat
+npx supabase secrets set AI_API_KEY=your-groq-key AI_BASE_URL=https://api.groq.com/openai/v1 AI_MODEL=openai/gpt-oss-20b
+npx supabase functions deploy ai-chat --use-api
 ```
 
-For another OpenAI-compatible provider, replace `AI_BASE_URL` and `AI_MODEL` with that provider’s values. The Flutter client calls the authenticated `ai-chat` function; the provider key remains server-side.
+For another OpenAI-compatible provider, replace `AI_BASE_URL` and `AI_MODEL` with that provider’s values. Do not use retired Groq model IDs; check the provider’s current model catalogue before deployment. The Flutter client calls the authenticated `ai-chat` function; the provider key remains server-side.
 
 ## Data expectations
 
@@ -45,9 +46,9 @@ The active client-side repositories use `profiles`, `listings`, `deal_requests`,
 If you have the Supabase CLI installed and have linked the project, run:
 
 ```bash
-supabase login
-supabase link --project-ref YOUR_PROJECT_REF
-supabase db push
+npx supabase login
+npx supabase link --project-ref YOUR_PROJECT_REF
+npx supabase db push
 ```
 
 Alternatively, open your Supabase SQL Editor, paste and run these migration files in order:

@@ -1,5 +1,14 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+String describeAiError(Object error) {
+  final text = error
+      .toString()
+      .replaceFirst(RegExp(r'^Exception:\\s*'), '')
+      .trim();
+  if (text.isEmpty) return 'The AI service did not return a diagnostic.';
+  return text.length > 320 ? '${text.substring(0, 320)}…' : text;
+}
+
 class AiService {
   const AiService();
 
@@ -32,7 +41,20 @@ class AiService {
         throw const FormatException('AI proxy returned an invalid response.');
       }
       final result = Map<String, dynamic>.from(data);
-      if (result['error'] is String) throw Exception(result['error'] as String);
+      if (result['error'] is String) {
+        final providerMessage = result['provider_message'] is String
+            ? (result['provider_message'] as String).trim()
+            : '';
+        final providerModel = result['provider_model'] is String
+            ? (result['provider_model'] as String).trim()
+            : '';
+        final details = [
+          result['error'] as String,
+          if (providerMessage.isNotEmpty) providerMessage,
+          if (providerModel.isNotEmpty) 'Model: $providerModel',
+        ].join(' ');
+        throw Exception(details);
+      }
       result['__source'] = 'ai';
       return result;
     } catch (error) {

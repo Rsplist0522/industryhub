@@ -297,8 +297,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       if (!mounted) return;
       setState(() {
         _isProfileAiThinking = false;
-        _profileAiAnswer =
-            'The Profile AI assistant is unavailable. Configure and deploy the Supabase ai-chat function before using this feature.';
+        _profileAiAnswer = 'Profile AI unavailable. ${describeAiError(error)}';
       });
       debugPrint('Profile AI review failed: $error');
     }

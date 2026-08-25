@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:industryhub/core/services.dart';
 import 'package:industryhub/core/validators.dart';
 
 void main() {
@@ -24,6 +25,22 @@ void main() {
       expect(validatePassword('onlyletters'), isNotNull);
       expect(validatePassword('StrongPass123'), isNull);
     });
+
+    test(
+      'describes AI provider errors without exposing oversized diagnostics',
+      () {
+        expect(
+          describeAiError(
+            Exception(
+              'AI provider returned HTTP 404. Model: openai/gpt-oss-20b',
+            ),
+          ),
+          contains('AI provider returned HTTP 404.'),
+        );
+        expect(describeAiError(''), isNotEmpty);
+        expect(describeAiError('x' * 500), hasLength(321));
+      },
+    );
 
     test('validates positive and non-negative numbers', () {
       expect(validatePositiveNumber('12.5', label: 'quantity'), isNull);
