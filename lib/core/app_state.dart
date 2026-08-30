@@ -2,6 +2,8 @@
 // Profile and marketplace records are scoped to the signed-in workspace while
 // the UI continues to expose simple immutable models.
 
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -146,12 +148,27 @@ class IndustryHubState {
 
 class IndustryHubNotifier extends Notifier<IndustryHubState> {
   late final SupabaseClient _supabase;
+  StreamSubscription<AuthState>? _authSubscription;
   var _disposed = false;
 
   @override
   IndustryHubState build() {
     _supabase = Supabase.instance.client;
-    ref.onDispose(() => _disposed = true);
+    _authSubscription = _supabase.auth.onAuthStateChange.listen((authState) {
+      switch (authState.event) {
+        case AuthChangeEvent.initialSession:
+        case AuthChangeEvent.signedIn:
+        case AuthChangeEvent.signedOut:
+        case AuthChangeEvent.userUpdated:
+          _loadProfileAndListings();
+        default:
+          break;
+      }
+    });
+    ref.onDispose(() {
+      _disposed = true;
+      _authSubscription?.cancel();
+    });
     Future<void>.microtask(_loadProfileAndListings);
     return const IndustryHubState();
   }
@@ -163,7 +180,7 @@ class IndustryHubNotifier extends Notifier<IndustryHubState> {
     try {
       final user = await _ensureSignedInUser();
       if (user == null) {
-        if (!_disposed) state = state.copyWith(isLoading: false);
+        if (!_disposed) state = const IndustryHubState(isLoading: false);
         return;
       }
 
@@ -198,7 +215,7 @@ class IndustryHubNotifier extends Notifier<IndustryHubState> {
       final savedMatches = await _countOwnRows('saved_matches', user.id);
       final negotiations = await _countOwnRows('fair_price_sessions', user.id);
 
-      if (_disposed) return;
+      if (_disposed || _supabase.auth.currentUser?.id != user.id) return;
       state = state.copyWith(
         profile: profile,
         listings: listings,

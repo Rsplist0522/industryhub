@@ -4,7 +4,6 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../app/theme.dart';
@@ -550,14 +549,6 @@ Evidence library:
     });
   }
 
-  void _goBack() {
-    if (context.canPop()) {
-      context.pop();
-    } else {
-      context.go('/home');
-    }
-  }
-
   String? _requiredText(String? value) =>
       validateRequiredText(value, label: 'a material or product name');
 
@@ -581,22 +572,16 @@ Evidence library:
       ...liveMaterials.where((material) => !_materials.contains(material)),
     ];
 
-    return Scaffold(
-      appBar: AppBar(
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          tooltip: 'Go back',
-          onPressed: _goBack,
+    return AppShell(
+      title: 'FairPrice Advisor',
+      showBack: true,
+      actions: [
+        IconButton(
+          icon: const Icon(Icons.restart_alt),
+          tooltip: 'Reset scenario',
+          onPressed: (_isRunning || _isChatThinking) ? null : _resetScenario,
         ),
-        title: const Text('FairPrice Advisor'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.restart_alt),
-            tooltip: 'Reset scenario',
-            onPressed: (_isRunning || _isChatThinking) ? null : _resetScenario,
-          ),
-        ],
-      ),
+      ],
       body: ListView(
         padding: const EdgeInsets.fromLTRB(20, 20, 20, 30),
         children: [
@@ -1400,3 +1385,4 @@ class _RangeLine extends StatelessWidget {
     );
   }
 }
+

@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../app/theme.dart';
 import '../../../core/app_state.dart';
 import '../../../core/widgets.dart';
@@ -43,9 +45,12 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
   final _dealRequestRepository = DealRequestRepository();
   final _industrialContextRepository = IndustrialContextRepository();
   final _transactions = <DealRequestRecord>[];
+  final _incomingRequests = <DealRequestRecord>[];
   final _requestedListingKeys = <String>{};
   final _marketplaceAiInput = TextEditingController();
   final _aiService = const AiService();
+  StreamSubscription<List<DealRequestRecord>>? _outgoingSubscription;
+  StreamSubscription<List<DealRequestRecord>>? _incomingSubscription;
 
   String _filter = 'all';
   String _sort = 'default';
@@ -55,8 +60,11 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
   double _minimumQuantity = 0;
   _SavedMarketplaceSearch? _savedSearch;
   bool _isLoadingHistory = true;
+  bool _isLoadingIncoming = true;
   bool _isSendingRequest = false;
+  bool _isRespondingToRequest = false;
   String? _historyError;
+  String? _incomingError;
   IndustrialContext? _industrialContext;
   bool _isLoadingIndustrialContext = true;
   String? _industrialContextError;
@@ -87,7 +95,7 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
   @override
   void initState() {
     super.initState();
-    Future<void>.microtask(_loadOutgoingRequests);
+    _subscribeToRequests();
     WidgetsBinding.instance.addPostFrameCallback(
       (_) => _loadIndustrialContext(),
     );
@@ -97,37 +105,155 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
   void dispose() {
     _search.dispose();
     _marketplaceAiInput.dispose();
+    _outgoingSubscription?.cancel();
+    _incomingSubscription?.cancel();
     super.dispose();
   }
 
-  Future<void> _loadOutgoingRequests() async {
-    if (mounted) {
-      setState(() {
-        _isLoadingHistory = true;
-        _historyError = null;
-      });
+  // Live Supabase Realtime subscriptions replace the old "fetch once, wait
+  // for a manual refresh" flow: outgoing status changes (accepted/rejected/
+  // cancelled) and new incoming requests now update the screen on their own.
+  void _subscribeToRequests() {
+    setState(() {
+      _isLoadingHistory = true;
+      _historyError = null;
+      _isLoadingIncoming = true;
+      _incomingError = null;
+    });
+
+    _outgoingSubscription?.cancel();
+    _outgoingSubscription = _dealRequestRepository.watchOutgoingRequests().listen(
+      (requests) {
+        if (!mounted) return;
+        setState(() {
+          _transactions
+            ..clear()
+            ..addAll(requests);
+          _requestedListingKeys
+            ..clear()
+            ..addAll(
+              requests
+                  .where((request) => request.status != 'CANCELLED')
+                  .map((request) => request.listingId),
+            );
+          _isLoadingHistory = false;
+          _historyError = null;
+        });
+      },
+      onError: (Object error) {
+        if (!mounted) return;
+        setState(() {
+          _isLoadingHistory = false;
+          _historyError = 'Supabase request history could not be loaded.';
+        });
+        debugPrint('Marketplace outgoing stream failed: $error');
+      },
+    );
+
+    _incomingSubscription?.cancel();
+    _incomingSubscription = _dealRequestRepository.watchIncomingRequests().listen(
+      (requests) {
+        if (!mounted) return;
+        setState(() {
+          _incomingRequests
+            ..clear()
+            ..addAll(requests);
+          _isLoadingIncoming = false;
+          _incomingError = null;
+        });
+      },
+      onError: (Object error) {
+        if (!mounted) return;
+        setState(() {
+          _isLoadingIncoming = false;
+          _incomingError = 'Incoming requests could not be loaded.';
+        });
+        debugPrint('Marketplace incoming stream failed: $error');
+      },
+    );
+  }
+
+  int get _pendingIncomingCount => _incomingRequests
+      .where((request) => request.status == 'REQUEST SENT')
+      .length;
+
+  Future<void> _respondToIncomingRequest(
+    DealRequestRecord request, {
+    required bool accept,
+  }) async {
+    if (_isRespondingToRequest) return;
+    var rejectionReason = '';
+    if (!accept) {
+      final reason = await _askRejectionReason();
+      if (reason == null || !mounted) return;
+      rejectionReason = reason;
     }
+    setState(() => _isRespondingToRequest = true);
     try {
-      final requests = await _dealRequestRepository.fetchOutgoingRequests();
+      await _dealRequestRepository.respondToRequest(
+        request.id,
+        accept: accept,
+        reason: rejectionReason,
+      );
+      // The incoming stream will push the updated status automatically;
+      // this snackbar just confirms the action fired.
       if (!mounted) return;
-      setState(() {
-        _transactions
-          ..clear()
-          ..addAll(requests);
-        _requestedListingKeys
-          ..clear()
-          ..addAll(requests.map((request) => request.listingId));
-        _isLoadingHistory = false;
-        _historyError = null;
-      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            accept
+                ? 'Request from ${request.requesterName} accepted.'
+                : 'Request from ${request.requesterName} declined.',
+          ),
+        ),
+      );
     } catch (error) {
       if (!mounted) return;
-      setState(() {
-        _isLoadingHistory = false;
-        _historyError = 'Supabase request history could not be loaded.';
-      });
-      debugPrint('Marketplace request history could not be loaded: $error');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Could not decline this request: ${error is PostgrestException ? error.message : error}',
+          ),
+        ),
+      );
+      debugPrint('Marketplace respond to request failed: $error');
+    } finally {
+      if (mounted) setState(() => _isRespondingToRequest = false);
     }
+  }
+
+  Future<String?> _askRejectionReason() async {
+    final reason = TextEditingController();
+    final result = await showDialog<String?>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Decline this request?'),
+        content: TextField(
+          controller: reason,
+          autofocus: true,
+          minLines: 2,
+          maxLines: 4,
+          maxLength: 240,
+          decoration: const InputDecoration(
+            labelText: 'Reason (optional)',
+            hintText: 'For example: Quantity is no longer available.',
+            alignLabelWithHint: true,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, reason.text.trim()),
+            child: const Text('Decline request'),
+          ),
+        ],
+      ),
+    );
+    reason.dispose();
+    return result;
   }
 
   Future<void> _loadIndustrialContext({String? marketplaceLocation}) async {
@@ -259,48 +385,47 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
     final sourceListings = ref.watch(appStateProvider).listings;
     final listings = _filteredListings(sourceListings);
 
-    return Scaffold(
-      appBar: AppBar(
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          tooltip: 'Go back',
-          onPressed: _goBack,
+    return AppShell(
+      title: 'ReSource Marketplace',
+      showBack: true,
+      actions: [
+        IconButton(
+          icon: const Icon(Icons.home_outlined),
+          tooltip: 'Return to Home Dashboard',
+          onPressed: _goHome,
         ),
-        title: const Text('ReSource Marketplace'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.home_outlined),
-            tooltip: 'Return to Home Dashboard',
-            onPressed: _goHome,
-          ),
-          PopupMenuButton<String>(
-            tooltip: 'Sort listings',
-            initialValue: _sort,
-            onSelected: (value) => setState(() => _sort = value),
-            itemBuilder: (context) => const [
-              PopupMenuItem(value: 'default', child: Text('Default order')),
-              PopupMenuItem(
-                value: 'relevance',
-                child: Text('Best match first'),
-              ),
-              PopupMenuItem(value: 'quantity', child: Text('Highest quantity')),
-              PopupMenuItem(value: 'location', child: Text('Location A–Z')),
-            ],
-            icon: const Icon(Icons.sort_outlined),
-          ),
-          IconButton(
-            icon: Badge.count(
-              count: _transactions.length,
-              isLabelVisible: _transactions.isNotEmpty,
-              child: const Icon(Icons.receipt_long_outlined),
+        PopupMenuButton<String>(
+          tooltip: 'Sort listings',
+          initialValue: _sort,
+          onSelected: (value) => setState(() => _sort = value),
+          itemBuilder: (context) => const [
+            PopupMenuItem(value: 'default', child: Text('Default order')),
+            PopupMenuItem(
+              value: 'relevance',
+              child: Text('Best match first'),
             ),
-            tooltip: 'View transaction history',
-            onPressed: _showHistory,
+            PopupMenuItem(value: 'quantity', child: Text('Highest quantity')),
+            PopupMenuItem(value: 'location', child: Text('Location A–Z')),
+          ],
+          icon: const Icon(Icons.sort_outlined),
+        ),
+        IconButton(
+          icon: Badge.count(
+            count: _pendingIncomingCount,
+            isLabelVisible: _pendingIncomingCount > 0,
+            child: const Icon(Icons.inbox_outlined),
           ),
-          const SizedBox(width: 6),
-        ],
-      ),
-      bottomNavigationBar: const _MarketplaceNavigationBar(),
+          tooltip: 'Review requests sent to your listings',
+          onPressed: _showIncomingRequests,
+        ),
+        IconButton(
+          icon: const Icon(Icons.receipt_long_outlined),
+          tooltip: 'View your outgoing requests',
+          onPressed: _showHistory,
+        ),
+        const SizedBox(width: 6),
+      ],
+      bottomNavigationBar: const AppBottomNav(currentIndex: 1),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(20, 20, 20, 30),
         children: [
@@ -570,14 +695,6 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
       _verifiedOnly ||
       _minimumQuantity > 0;
 
-  void _goBack() {
-    if (context.canPop()) {
-      context.pop();
-      return;
-    }
-    context.go('/home');
-  }
-
   List<Listing> _filteredListings(List<Listing> source) {
     final query = _search.text.trim().toLowerCase();
     final filtered = source.where((listing) {
@@ -730,7 +847,14 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
                 ),
                 const SizedBox(height: 16),
                 if (requested)
-                  const _RequestStatus()
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: null,
+                      icon: const Icon(Icons.check_circle_outline),
+                      label: const Text('Request already sent'),
+                    ),
+                  )
                 else
                   SizedBox(
                     width: double.infinity,
@@ -852,7 +976,7 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
           content: Text(
             'Deal request sent to ${listing.owner}. Await their direct response.',
           ),
-          action: SnackBarAction(label: 'History', onPressed: _showHistory),
+          duration: const Duration(seconds: 3),
         ),
       );
     } on StateError catch (error) {
@@ -1036,8 +1160,19 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
     );
   }
 
+  Color _statusColor(String status) {
+    switch (status) {
+      case 'ACCEPTED':
+        return AppColors.green;
+      case 'REJECTED':
+      case 'CANCELLED':
+        return AppColors.rust;
+      default:
+        return AppColors.amber;
+    }
+  }
+
   Future<void> _showHistory() async {
-    await _loadOutgoingRequests();
     if (!mounted) return;
     await showModalBottomSheet<void>(
       context: context,
@@ -1081,7 +1216,7 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
                     actionLabel: 'Try again',
                     onAction: () {
                       Navigator.pop(sheetContext);
-                      _showHistory();
+                      _subscribeToRequests();
                     },
                   )
                 else if (_transactions.isEmpty)
@@ -1121,7 +1256,7 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
                                       const SizedBox(width: 8),
                                       StatusChip(
                                         label: request.status,
-                                        color: AppColors.amber,
+                                        color: _statusColor(request.status),
                                       ),
                                     ],
                                   ),
@@ -1146,14 +1281,29 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
                                         fontSize: 12,
                                       ),
                                     ),
+                                  if (request.responseNote.isNotEmpty)
+                                    Text(
+                                      'Response: ${request.responseNote}',
+                                      style: const TextStyle(
+                                        color: AppColors.slate,
+                                        fontSize: 12,
+                                      ),
+                                    ),
                                   const SizedBox(height: 5),
                                   Row(
                                     children: [
                                       Expanded(
                                         child: Text(
-                                          request.status == 'CANCELLED'
-                                              ? 'This request was cancelled.'
-                                              : 'Awaiting a direct business response.',
+                                          switch (request.status) {
+                                            'CANCELLED' =>
+                                              'This request was cancelled.',
+                                            'ACCEPTED' =>
+                                              '${request.owner} accepted this request.',
+                                            'REJECTED' =>
+                                              '${request.owner} declined this request.',
+                                            _ =>
+                                              'Awaiting a direct business response.',
+                                          },
                                           style: const TextStyle(
                                             color: AppColors.slate,
                                             fontSize: 12,
@@ -1228,6 +1378,224 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
         ),
       );
     }
+  }
+
+  Future<void> _showIncomingRequests() async {
+    if (!mounted) return;
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      backgroundColor: AppColors.chalk,
+      builder: (sheetContext) => SafeArea(
+        top: false,
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.sizeOf(sheetContext).height * 0.78,
+          ),
+          child: StatefulBuilder(
+            builder: (context, setSheetState) => SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Requests for your listings',
+                    style: Theme.of(sheetContext).textTheme.titleLarge,
+                  ),
+                  const SizedBox(height: 4),
+                  const Text(
+                    'Deal requests other businesses have sent to material you listed. Accept to move a discussion forward, or decline it.',
+                    style: TextStyle(color: AppColors.slate, height: 1.35),
+                  ),
+                  const SizedBox(height: 14),
+                  if (_isLoadingIncoming)
+                    const Center(
+                      child: Padding(
+                        padding: EdgeInsets.all(20),
+                        child: CircularProgressIndicator(),
+                      ),
+                    )
+                  else if (_incomingError != null)
+                    _MarketplaceEmptyState(
+                      icon: Icons.cloud_off_outlined,
+                      title: 'Incoming requests are unavailable.',
+                      description: _incomingError!,
+                      actionLabel: 'Try again',
+                      onAction: () {
+                        Navigator.pop(sheetContext);
+                        _subscribeToRequests();
+                      },
+                    )
+                  else if (_incomingRequests.isEmpty)
+                    const _MarketplaceEmptyState(
+                      icon: Icons.inbox_outlined,
+                      title: 'No requests yet.',
+                      description:
+                          'When a business sends a request for one of your listings, it will show up here for you to accept or decline.',
+                    )
+                  else
+                    ..._incomingRequests.map(
+                      (request) => Card(
+                        margin: const EdgeInsets.only(bottom: 10),
+                        child: Padding(
+                          padding: const EdgeInsets.all(12),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const CircleAvatar(
+                                child: Icon(Icons.handshake_outlined),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        Expanded(
+                                          child: Text(
+                                            request.material,
+                                            style: Theme.of(
+                                              sheetContext,
+                                            ).textTheme.titleSmall,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        StatusChip(
+                                          label: request.status,
+                                          color: _statusColor(request.status),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 5),
+                                    Text(
+                                      'From ${request.requesterName} · ${request.quantity}',
+                                      style: const TextStyle(
+                                        color: AppColors.slate,
+                                      ),
+                                    ),
+                                    Text(
+                                      request.location,
+                                      style: const TextStyle(
+                                        color: AppColors.slate,
+                                      ),
+                                    ),
+                                    if (request.note.isNotEmpty)
+                                      Padding(
+                                        padding: const EdgeInsets.only(
+                                          top: 4,
+                                        ),
+                                        child: Text(
+                                          '"${request.note}"',
+                                          style: const TextStyle(
+                                            color: AppColors.slate,
+                                            fontSize: 12,
+                                            fontStyle: FontStyle.italic,
+                                          ),
+                                        ),
+                                      ),
+                                    if (request.responseNote.isNotEmpty)
+                                      Padding(
+                                        padding: const EdgeInsets.only(top: 4),
+                                        child: Text(
+                                          'Response: ${request.responseNote}',
+                                          style: const TextStyle(
+                                            color: AppColors.slate,
+                                            fontSize: 12,
+                                          ),
+                                        ),
+                                      ),
+                                    const SizedBox(height: 8),
+                                    if (request.status == 'REQUEST SENT')
+                                      Row(
+                                        children: [
+                                          Expanded(
+                                            child: OutlinedButton(
+                                              onPressed: _isRespondingToRequest
+                                                  ? null
+                                                  : () async {
+                                                      await _respondToIncomingRequest(
+                                                        request,
+                                                        accept: false,
+                                                      );
+                                                      setSheetState(() {});
+                                                    },
+                                              child: const Text('Decline'),
+                                            ),
+                                          ),
+                                          const SizedBox(width: 10),
+                                          Expanded(
+                                            child: FilledButton(
+                                              onPressed: _isRespondingToRequest
+                                                  ? null
+                                                  : () async {
+                                                      await _respondToIncomingRequest(
+                                                        request,
+                                                        accept: true,
+                                                      );
+                                                      setSheetState(() {});
+                                                    },
+                                              child: const Text('Accept'),
+                                            ),
+                                          ),
+                                        ],
+                                      )
+                                    else
+                                      Text(
+                                        switch (request.status) {
+                                          'ACCEPTED' =>
+                                            'You accepted this request.',
+                                          'REJECTED' =>
+                                            'You declined this request.',
+                                          _ =>
+                                            'This request was cancelled by the requester.',
+                                        },
+                                        style: const TextStyle(
+                                          color: AppColors.slate,
+                                          fontSize: 12,
+                                        ),
+                                      ),
+                                    const SizedBox(height: 4),
+                                    Align(
+                                      alignment: Alignment.centerRight,
+                                      child: Text(
+                                        _formatTime(request.sentAt),
+                                        style: const TextStyle(
+                                          color: AppColors.slate,
+                                          fontSize: 12,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  const SizedBox(height: 10),
+                  SizedBox(
+                    width: double.infinity,
+                    child: TextButton.icon(
+                      onPressed: () {
+                        Navigator.pop(sheetContext);
+                        _goHome();
+                      },
+                      icon: const Icon(Icons.home_outlined),
+                      label: const Text('Return to Home Dashboard'),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   void _clearAdvancedFilters() {
@@ -1476,15 +1844,6 @@ class _MarketplaceCard extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(width: 6),
-                  if (requested)
-                    const Text(
-                      'REQUEST SENT',
-                      style: TextStyle(
-                        color: AppColors.green,
-                        fontSize: 10,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
                 ],
               ),
               const SizedBox(height: 5),
@@ -1540,33 +1899,6 @@ class _MarketplaceEmptyState extends StatelessWidget {
             ],
           ],
         ),
-      ),
-    );
-  }
-}
-
-class _RequestStatus extends StatelessWidget {
-  const _RequestStatus();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: AppColors.green.withValues(alpha: 0.10),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: const Row(
-        children: [
-          Icon(Icons.check_circle_outline, color: AppColors.green),
-          SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              'Deal request sent. You can review it in transaction history.',
-            ),
-          ),
-        ],
       ),
     );
   }
@@ -1643,35 +1975,4 @@ class _SavedSearchBanner extends StatelessWidget {
   }
 }
 
-class _MarketplaceNavigationBar extends StatelessWidget {
-  const _MarketplaceNavigationBar();
 
-  @override
-  Widget build(BuildContext context) {
-    return NavigationBar(
-      selectedIndex: 1,
-      onDestinationSelected: (index) {
-        if (index == 0) context.go('/home');
-        if (index == 1) context.go('/marketplace');
-        if (index == 2) context.go('/resource-profile');
-      },
-      destinations: const [
-        NavigationDestination(
-          icon: Icon(Icons.grid_view_outlined),
-          selectedIcon: Icon(Icons.grid_view),
-          label: 'Console',
-        ),
-        NavigationDestination(
-          icon: Icon(Icons.storefront_outlined),
-          selectedIcon: Icon(Icons.storefront),
-          label: 'Market',
-        ),
-        NavigationDestination(
-          icon: Icon(Icons.person_outline),
-          selectedIcon: Icon(Icons.person),
-          label: 'Profile',
-        ),
-      ],
-    );
-  }
-}

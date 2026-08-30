@@ -194,7 +194,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     SizedBox(
                       width: double.infinity,
                       child: OutlinedButton(
-                        onPressed: () => context.go('/signup'),
+                        onPressed: () => context.push('/signup'),
                         child: const Text('Create a business account'),
                       ),
                     ),
@@ -294,6 +294,7 @@ class _SignupScreenState extends State<SignupScreen> {
     return AppShell(
       title: 'Create account',
       showBack: true,
+      fallbackRoute: '/login',
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(24),
         child: Form(
@@ -462,3 +463,5 @@ class _RoleSelectScreenState extends State<RoleSelectScreen> {
     );
   }
 }
+
+

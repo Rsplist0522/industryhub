@@ -4,7 +4,6 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../app/theme.dart';
@@ -752,14 +751,6 @@ class _SkillMatchScreenState extends ConsumerState<SkillMatchScreen> {
     _send();
   }
 
-  void _goBack() {
-    if (context.canPop()) {
-      context.pop();
-      return;
-    }
-    context.go('/home');
-  }
-
   void _scrollToBottom() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_scrollController.hasClients) {
@@ -786,22 +777,16 @@ class _SkillMatchScreenState extends ConsumerState<SkillMatchScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          tooltip: 'Go back',
-          onPressed: _goBack,
+    return AppShell(
+      title: 'Skill Advisor',
+      showBack: true,
+      actions: [
+        IconButton(
+          icon: const Icon(Icons.restart_alt),
+          tooltip: 'Start a new skill brief',
+          onPressed: _isThinking ? null : _resetConversation,
         ),
-        title: const Text('Skill Advisor'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.restart_alt),
-            tooltip: 'Start a new skill brief',
-            onPressed: _isThinking ? null : _resetConversation,
-          ),
-        ],
-      ),
+      ],
       body: Column(
         children: [
           Expanded(
@@ -1323,3 +1308,4 @@ class _LiveCourseSearchCard extends StatelessWidget {
     );
   }
 }
+

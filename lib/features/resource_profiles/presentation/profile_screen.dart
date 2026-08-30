@@ -4,7 +4,6 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 
 import '../../../app/theme.dart';
 import '../../../core/app_state.dart';
@@ -77,15 +76,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         profile.sector.trim().isNotEmpty;
     final hasListings = ownListings.isNotEmpty;
 
-    return Scaffold(
-      appBar: AppBar(
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          tooltip: 'Go back',
-          onPressed: _goBack,
-        ),
-        title: const Text('My Profile'),
-      ),
+    return AppShell(
+      title: 'My Profile',
+      showBack: true,
+      bottomNavigationBar: const AppBottomNav(currentIndex: 2),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(20, 20, 20, 30),
         children: [
@@ -243,14 +237,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         ],
       ),
     );
-  }
-
-  void _goBack() {
-    if (context.canPop()) {
-      context.pop();
-    } else {
-      context.go('/home');
-    }
   }
 
   void _startEditing() => setState(() => _editing = true);
@@ -1238,3 +1224,4 @@ class _ProfileAiAdvisor extends StatelessWidget {
     );
   }
 }
+

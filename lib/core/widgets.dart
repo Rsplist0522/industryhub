@@ -1,10 +1,14 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import '../app/theme.dart';
+
 
 class SpecDivider extends StatelessWidget {
   const SpecDivider({super.key, this.label});
 
+
   final String? label;
+
 
   @override
   Widget build(BuildContext context) {
@@ -24,21 +28,27 @@ class SpecDivider extends StatelessWidget {
   }
 }
 
+
 class Eyebrow extends StatelessWidget {
   const Eyebrow(this.text, {super.key, this.color});
 
+
   final String text;
   final Color? color;
+
 
   @override
   Widget build(BuildContext context) => Text(text.toUpperCase(), style: AppTheme.eyebrowStyle.copyWith(color: color));
 }
 
+
 class StatusChip extends StatelessWidget {
   const StatusChip({super.key, required this.label, required this.color});
 
+
   final String label;
   final Color color;
+
 
   @override
   Widget build(BuildContext context) {
@@ -61,6 +71,7 @@ class StatusChip extends StatelessWidget {
   }
 }
 
+
 class ModuleCard extends StatelessWidget {
   const ModuleCard({
     super.key,
@@ -72,12 +83,14 @@ class ModuleCard extends StatelessWidget {
     this.accent = AppColors.navy,
   });
 
+
   final String eyebrow;
   final String title;
   final String description;
   final IconData icon;
   final VoidCallback onTap;
   final Color accent;
+
 
   @override
   Widget build(BuildContext context) {
@@ -117,10 +130,13 @@ class ModuleCard extends StatelessWidget {
   }
 }
 
+
 class MetricStrip extends StatelessWidget {
   const MetricStrip({super.key, required this.metrics});
 
+
   final List<MapEntry<String, String>> metrics;
+
 
   @override
   Widget build(BuildContext context) {
@@ -147,11 +163,14 @@ class MetricStrip extends StatelessWidget {
   }
 }
 
+
 class ChatBubble extends StatelessWidget {
   const ChatBubble({super.key, required this.text, required this.isUser});
 
+
   final String text;
   final bool isUser;
+
 
   @override
   Widget build(BuildContext context) {
@@ -177,12 +196,15 @@ class ChatBubble extends StatelessWidget {
   }
 }
 
+
 class PageIntro extends StatelessWidget {
   const PageIntro({super.key, required this.eyebrow, required this.title, required this.description});
+
 
   final String eyebrow;
   final String title;
   final String description;
+
 
   @override
   Widget build(BuildContext context) {
@@ -199,25 +221,114 @@ class PageIntro extends StatelessWidget {
   }
 }
 
+
 class AppShell extends StatelessWidget {
-  const AppShell({super.key, required this.title, required this.body, this.actions, this.showBack = false, this.bottomNavigationBar});
+  const AppShell({
+    super.key,
+    required this.title,
+    required this.body,
+    this.actions,
+    this.showBack = false,
+    this.bottomNavigationBar,
+    this.fallbackRoute = '/home',
+  });
+
 
   final String title;
   final Widget body;
   final List<Widget>? actions;
   final bool showBack;
   final Widget? bottomNavigationBar;
+  // Where "back" should land when there is nothing left to pop, e.g. when a
+  // screen was reached via context.go() (which clears the navigation stack)
+  // rather than context.push(). automaticallyImplyLeading alone can't do
+  // this — it only shows a back arrow if canPop() is already true, so a
+  // page opened with go() silently loses its back button.
+  final String fallbackRoute;
+
+
+  void _goBack(BuildContext context) {
+    if (context.canPop()) {
+      context.pop();
+    } else {
+      context.go(fallbackRoute);
+    }
+  }
+
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        automaticallyImplyLeading: showBack,
+        automaticallyImplyLeading: false,
+        leading: showBack
+            ? IconButton(
+                icon: const Icon(Icons.arrow_back),
+                tooltip: 'Go back',
+                onPressed: () => _goBack(context),
+              )
+            : null,
         title: Text(title),
         actions: actions,
       ),
       body: SafeArea(child: body),
       bottomNavigationBar: bottomNavigationBar,
+    );
+  }
+}
+
+
+/// Shared bottom navigation for the three main modules. Previously each
+/// screen (Marketplace, Home, Profile) built its own NavigationBar with
+/// slightly different destinations/ordering; this is the single source of
+/// truth so the bottom bar — and by extension the whole shell — looks and
+/// behaves the same everywhere.
+class AppBottomNav extends StatelessWidget {
+  const AppBottomNav({super.key, required this.currentIndex});
+
+
+  final int currentIndex;
+
+
+  static const _destinations = [
+    (
+      icon: Icons.grid_view_outlined,
+      selectedIcon: Icons.grid_view,
+      label: 'Console',
+      route: '/home',
+    ),
+    (
+      icon: Icons.storefront_outlined,
+      selectedIcon: Icons.storefront,
+      label: 'Market',
+      route: '/marketplace',
+    ),
+    (
+      icon: Icons.person_outline,
+      selectedIcon: Icons.person,
+      label: 'Profile',
+      route: '/resource-profile',
+    ),
+  ];
+
+
+  @override
+  Widget build(BuildContext context) {
+    return NavigationBar(
+      selectedIndex: currentIndex,
+      onDestinationSelected: (index) {
+        if (index == currentIndex) return;
+        context.go(_destinations[index].route);
+      },
+      destinations: _destinations
+          .map(
+            (d) => NavigationDestination(
+              icon: Icon(d.icon),
+              selectedIcon: Icon(d.selectedIcon),
+              label: d.label,
+            ),
+          )
+          .toList(),
     );
   }
 }
