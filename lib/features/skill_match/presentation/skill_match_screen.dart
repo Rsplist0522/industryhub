@@ -4,6 +4,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../app/theme.dart';
@@ -178,6 +179,18 @@ class _SkillMatchScreenState extends ConsumerState<SkillMatchScreen> {
   Future<void> _send() async {
     final text = _input.text.trim();
     if (text.isEmpty || _isThinking) return;
+    if (!ref.read(appStateProvider).profile.hasRequiredProfileIdentity) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Complete your business profile before using SkillMatch.',
+          ),
+          duration: Duration(seconds: 3),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
 
     _input.clear();
     setState(() {

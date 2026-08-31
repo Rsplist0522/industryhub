@@ -342,6 +342,20 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   }
 
   Future<void> _showAddListing(BuildContext context) async {
+    final profileReady = ref.read(appStateProvider).profile.hasRequiredProfileIdentity;
+    if (!profileReady) {
+      _startEditing();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Complete your business name and industry sector before publishing a listing.',
+          ),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
     final material = TextEditingController();
     final quantity = TextEditingController();
     final location = TextEditingController();

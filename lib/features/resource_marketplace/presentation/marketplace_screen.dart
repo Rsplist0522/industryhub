@@ -195,14 +195,13 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
         accept: accept,
         reason: rejectionReason,
       );
-      // The incoming stream will push the updated status automatically;
-      // this snackbar just confirms the action fired.
+      await ref.read(appStateProvider.notifier).refreshSupabaseData();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
             accept
-                ? 'Request from ${request.requesterName} accepted.'
+                ? 'Request from ${request.requesterName} accepted. The listing is now unavailable.'
                 : 'Request from ${request.requesterName} declined.',
           ),
         ),
@@ -898,6 +897,19 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
   }
 
   Future<void> _showDealRequestDialog(Listing listing) async {
+    if (!ref.read(appStateProvider).profile.hasRequiredProfileIdentity) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Complete your business profile before sending a deal request.',
+          ),
+          duration: Duration(seconds: 3),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
     final note = TextEditingController();
     final submittedNote = await showDialog<String?>(
       context: context,

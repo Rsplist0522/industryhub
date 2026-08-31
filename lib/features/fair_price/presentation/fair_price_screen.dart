@@ -4,6 +4,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../app/theme.dart';
@@ -197,6 +198,18 @@ class _FairPriceScreenState extends ConsumerState<FairPriceScreen> {
 
   Future<void> _start() async {
     if (!(_formKey.currentState?.validate() ?? false) || _isRunning) return;
+    if (!ref.read(appStateProvider).profile.hasRequiredProfileIdentity) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Complete your business profile before running a FairPrice negotiation.',
+          ),
+          duration: Duration(seconds: 3),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
 
     final product = _product.text.trim();
     final quantity = double.parse(_quantity.text.trim());

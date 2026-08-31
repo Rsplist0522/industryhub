@@ -9,6 +9,23 @@ import 'package:industryhub/features/resource_marketplace/data/industrial_contex
 import 'package:industryhub/features/skill_match/data/training_programme_repository.dart';
 
 void main() {
+  group('Profile readiness rules', () {
+    test('requires business name and sector before unlocking matching features', () {
+      expect(const CompanyProfile().hasRequiredProfileIdentity, isFalse);
+      expect(
+        const CompanyProfile(businessName: 'Sunrise Foundry').hasRequiredProfileIdentity,
+        isFalse,
+      );
+      expect(
+        const CompanyProfile(
+          businessName: 'Sunrise Foundry',
+          sector: 'Machinery and equipment',
+        ).hasRequiredProfileIdentity,
+        isTrue,
+      );
+    });
+  });
+
   group('Supabase row mappers', () {
     test('maps listing numeric and nullable fields safely', () {
       final listing = Listing.fromSupabase({

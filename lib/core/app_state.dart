@@ -86,6 +86,9 @@ class CompanyProfile {
   final String? msicCode;
   final String? msicDescription;
 
+  bool get hasRequiredProfileIdentity =>
+      businessName.trim().isNotEmpty && sector.trim().isNotEmpty;
+
   factory CompanyProfile.fromSupabase(Map<String, dynamic> data) =>
       CompanyProfile(
         businessName: data['business_name'] as String? ?? '',
@@ -380,6 +383,11 @@ class IndustryHubNotifier extends Notifier<IndustryHubState> {
   }) async {
     final user = await _ensureSignedInUser();
     if (user == null) throw StateError('Sign in before publishing a listing.');
+    if (!state.profile.hasRequiredProfileIdentity) {
+      throw StateError(
+        'Complete your business profile before publishing a listing.',
+      );
+    }
 
     try {
       final createdRow = await _supabase
@@ -496,6 +504,11 @@ class IndustryHubNotifier extends Notifier<IndustryHubState> {
     if (user == null) {
       throw StateError('Sign in before saving a training match.');
     }
+    if (!state.profile.hasRequiredProfileIdentity) {
+      throw StateError(
+        'Complete your business profile before saving skill-match recommendations.',
+      );
+    }
 
     await _supabase.from('saved_matches').upsert({
       'user_id': user.id,
@@ -524,6 +537,11 @@ class IndustryHubNotifier extends Notifier<IndustryHubState> {
     final user = await _ensureSignedInUser();
     if (user == null) {
       throw StateError('Sign in before saving a price session.');
+    }
+    if (!state.profile.hasRequiredProfileIdentity) {
+      throw StateError(
+        'Complete your business profile before saving a FairPrice recommendation.',
+      );
     }
 
     await _supabase.from('fair_price_sessions').insert({

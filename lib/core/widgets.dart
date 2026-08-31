@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../app/theme.dart';
+import 'app_state.dart';
 
 
 class SpecDivider extends StatelessWidget {
@@ -283,7 +285,7 @@ class AppShell extends StatelessWidget {
 /// slightly different destinations/ordering; this is the single source of
 /// truth so the bottom bar — and by extension the whole shell — looks and
 /// behaves the same everywhere.
-class AppBottomNav extends StatelessWidget {
+class AppBottomNav extends ConsumerWidget {
   const AppBottomNav({super.key, required this.currentIndex});
 
 
@@ -313,7 +315,7 @@ class AppBottomNav extends StatelessWidget {
 
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return NavigationBar(
       selectedIndex: currentIndex,
       onDestinationSelected: (index) {

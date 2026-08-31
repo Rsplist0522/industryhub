@@ -98,11 +98,19 @@ class DealRequestRepository {
 
     final requesterProfile = await _supabase
         .from('profiles')
-        .select('business_name')
+        .select('business_name, sector')
         .eq('user_id', user.id)
         .maybeSingle();
     final requesterName =
         (requesterProfile?['business_name'] as String?)?.trim();
+    final requesterSector =
+        (requesterProfile?['sector'] as String?)?.trim();
+    if ((requesterName == null || requesterName.isEmpty) ||
+        (requesterSector == null || requesterSector.isEmpty)) {
+      throw StateError(
+        'Complete your business name and industry sector before sending a deal request.',
+      );
+    }
 
     final createdRow = await _supabase
         .from('deal_requests')
@@ -194,6 +202,19 @@ class DealRequestRepository {
       throw StateError('Sign in before responding to a deal request.');
     }
 
+    final requestRow = await _supabase
+        .from('deal_requests')
+        .select('listing_id')
+        .eq('id', requestId)
+        .eq('listing_owner_id', user.id)
+        .maybeSingle();
+
+    if (requestRow == null) {
+      throw StateError('This request is no longer available to accept.');
+    }
+
+    final listingId = requestRow['listing_id'] as String?;
+
     await _supabase
         .from('deal_requests')
         .update({
@@ -203,6 +224,21 @@ class DealRequestRepository {
         })
         .eq('id', requestId)
         .eq('listing_owner_id', user.id);
+
+    if (accept && listingId != null && listingId.isNotEmpty) {
+      await _supabase
+          .from('deal_requests')
+          .update({
+            'status': 'REJECTED',
+            'response_note': 'This listing was accepted by another business and is no longer available.',
+            'updated_at': DateTime.now().toIso8601String(),
+          })
+          .eq('listing_id', listingId)
+          .neq('id', requestId)
+          .inFilter('status', ['REQUEST SENT']);
+
+      await _supabase.from('listings').delete().eq('id', listingId);
+    }
   }
 
   /// Live view of this user's outgoing requests. Used instead of a one-shot
