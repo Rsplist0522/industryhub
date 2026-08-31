@@ -310,19 +310,20 @@ class _AppShellState extends State<AppShell> {
             key: _scaffoldKey,
             appBar: AppBar(
               automaticallyImplyLeading: false,
+              leadingWidth: widget.showBack ? 96 : 56, // 👈 add this
               leading: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   if (widget.showBack)
-                    IconButton(
-                      icon: const Icon(Icons.arrow_back),
-                      tooltip: 'Go back',
-                      onPressed: () => _goBack(context),
-                    ),
                   IconButton(
-                    icon: const Icon(Icons.menu),
-                    tooltip: 'Open menu',
-                    onPressed: () => _scaffoldKey.currentState?.openDrawer(),
+                    icon: const Icon(Icons.arrow_back),
+                    tooltip: 'Go back',
+                    onPressed: () => _goBack(context),
+                  ),
+                    IconButton(
+                      icon: const Icon(Icons.menu),
+                      tooltip: 'Open menu',
+                      onPressed: () => _scaffoldKey.currentState?.openDrawer(),
                   ),
                 ],
               ),
@@ -333,11 +334,15 @@ class _AppShellState extends State<AppShell> {
               child: ListView(
                 padding: EdgeInsets.zero,
                 children: [
-                  DrawerHeader(
-                    decoration: BoxDecoration(color: Theme.of(context).primaryColor),
+                  Container(
+                    height: 72, // thinner than DrawerHeader's default ~160
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    alignment: Alignment.centerLeft,
+                    decoration: const BoxDecoration(color: AppColors.navy), // same blue as the dashboard
                     child: const Text(
                       'Menu',
-                      style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold),
+                      style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
                     ),
                   ),
                   ...navItems.map((item) {
