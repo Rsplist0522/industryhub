@@ -253,7 +253,13 @@ class AppShell extends StatefulWidget {
 }
 
 class _AppShellState extends State<AppShell> {
-  bool _isRailExpanded = false;
+  late final GlobalKey<ScaffoldState> _scaffoldKey;
+
+  @override
+  void initState() {
+    super.initState();
+    _scaffoldKey = GlobalKey<ScaffoldState>();
+  }
 
   void _goBack(BuildContext context) {
     if (context.canPop()) {
@@ -263,10 +269,11 @@ class _AppShellState extends State<AppShell> {
     }
   }
 
-  void _toggleRail() {
-    setState(() {
-      _isRailExpanded = !_isRailExpanded;
-    });
+  void _navigateTo(String route) {
+    context.go(route);
+    if (_scaffoldKey.currentState?.isDrawerOpen ?? false) {
+      Navigator.of(context).pop();
+    }
   }
 
   @override
@@ -298,11 +305,9 @@ class _AppShellState extends State<AppShell> {
           ];
 
           final currentRoute = GoRouterState.of(context).matchedLocation;
-          final selectedIndex = navItems.indexWhere(
-            (item) => item.route == currentRoute,
-          );
 
           return Scaffold(
+            key: _scaffoldKey,
             appBar: AppBar(
               automaticallyImplyLeading: false,
               leading: Row(
@@ -315,47 +320,39 @@ class _AppShellState extends State<AppShell> {
                       onPressed: () => _goBack(context),
                     ),
                   IconButton(
-                    icon: Icon(_isRailExpanded ? Icons.menu_open : Icons.menu),
-                    tooltip: _isRailExpanded ? 'Collapse menu' : 'Expand menu',
-                    onPressed: _toggleRail,
+                    icon: const Icon(Icons.menu),
+                    tooltip: 'Open menu',
+                    onPressed: () => _scaffoldKey.currentState?.openDrawer(),
                   ),
                 ],
               ),
               title: Text(widget.title),
               actions: widget.actions,
             ),
-            body: Row(
-              children: [
-                SafeArea(
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 200),
-                    width: _isRailExpanded ? 180 : 72,
-                    curve: Curves.easeInOut,
-                    child: NavigationRail(
-                      selectedIndex: selectedIndex >= 0 ? selectedIndex : 0,
-                      onDestinationSelected: (index) {
-                        if (index < 0 || index >= navItems.length) return;
-                        context.go(navItems[index].route);
-                      },
-                      labelType: _isRailExpanded
-                          ? NavigationRailLabelType.all
-                          : NavigationRailLabelType.none,
-                      destinations: navItems
-                          .map(
-                            (item) => NavigationRailDestination(
-                              icon: Icon(item.icon),
-                              selectedIcon: Icon(item.selectedIcon),
-                              label: Text(item.label),
-                            ),
-                          )
-                          .toList(),
+            drawer: Drawer(
+              child: ListView(
+                padding: EdgeInsets.zero,
+                children: [
+                  DrawerHeader(
+                    decoration: BoxDecoration(color: Theme.of(context).primaryColor),
+                    child: const Text(
+                      'Menu',
+                      style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold),
                     ),
                   ),
-                ),
-                const VerticalDivider(width: 1, thickness: 1),
-                Expanded(child: SafeArea(child: widget.body)),
-              ],
+                  ...navItems.map((item) {
+                    final isSelected = item.route == currentRoute;
+                    return ListTile(
+                      leading: Icon(isSelected ? item.selectedIcon : item.icon),
+                      title: Text(item.label),
+                      selected: isSelected,
+                      onTap: () => _navigateTo(item.route),
+                    );
+                  }),
+                ],
+              ),
             ),
+            body: SafeArea(child: widget.body),
           );
         }
 
