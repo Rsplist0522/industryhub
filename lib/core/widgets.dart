@@ -223,7 +223,7 @@ class PageIntro extends StatelessWidget {
 }
 
 
-class AppShell extends StatelessWidget {
+class AppShell extends StatefulWidget {
   const AppShell({
     super.key,
     required this.title,
@@ -248,14 +248,26 @@ class AppShell extends StatelessWidget {
   final String fallbackRoute;
 
 
+  @override
+  State<AppShell> createState() => _AppShellState();
+}
+
+class _AppShellState extends State<AppShell> {
+  bool _isRailExpanded = false;
+
   void _goBack(BuildContext context) {
     if (context.canPop()) {
       context.pop();
     } else {
-      context.go(fallbackRoute);
+      context.go(widget.fallbackRoute);
     }
   }
 
+  void _toggleRail() {
+    setState(() {
+      _isRailExpanded = !_isRailExpanded;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -293,52 +305,55 @@ class AppShell extends StatelessWidget {
           return Scaffold(
             appBar: AppBar(
               automaticallyImplyLeading: false,
-              leading: showBack
-                  ? IconButton(
+              leading: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (widget.showBack)
+                    IconButton(
                       icon: const Icon(Icons.arrow_back),
                       tooltip: 'Go back',
                       onPressed: () => _goBack(context),
-                    )
-                  : null,
-              title: Text(title),
-              actions: actions,
+                    ),
+                  IconButton(
+                    icon: Icon(_isRailExpanded ? Icons.menu_open : Icons.menu),
+                    tooltip: _isRailExpanded ? 'Collapse menu' : 'Expand menu',
+                    onPressed: _toggleRail,
+                  ),
+                ],
+              ),
+              title: Text(widget.title),
+              actions: widget.actions,
             ),
             body: Row(
               children: [
                 SafeArea(
-                  child: StatefulBuilder(
-                    builder: (context, setStateInner) {
-                      final expanded = MediaQuery.sizeOf(context).width >= 960;
-
-                      return AnimatedContainer(
-                        duration: const Duration(milliseconds: 200),
-                        width: expanded ? 180 : 72,
-                        curve: Curves.easeInOut,
-                        child: NavigationRail(
-                          selectedIndex: selectedIndex >= 0 ? selectedIndex : 0,
-                          onDestinationSelected: (index) {
-                            if (index < 0 || index >= navItems.length) return;
-                            context.go(navItems[index].route);
-                          },
-                          labelType: expanded
-                              ? NavigationRailLabelType.all
-                              : NavigationRailLabelType.none,
-                          destinations: navItems
-                              .map(
-                                (item) => NavigationRailDestination(
-                                  icon: Icon(item.icon),
-                                  selectedIcon: Icon(item.selectedIcon),
-                                  label: Text(item.label),
-                                ),
-                              )
-                              .toList(),
-                        ),
-                      );
-                    },
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
+                    width: _isRailExpanded ? 180 : 72,
+                    curve: Curves.easeInOut,
+                    child: NavigationRail(
+                      selectedIndex: selectedIndex >= 0 ? selectedIndex : 0,
+                      onDestinationSelected: (index) {
+                        if (index < 0 || index >= navItems.length) return;
+                        context.go(navItems[index].route);
+                      },
+                      labelType: _isRailExpanded
+                          ? NavigationRailLabelType.all
+                          : NavigationRailLabelType.none,
+                      destinations: navItems
+                          .map(
+                            (item) => NavigationRailDestination(
+                              icon: Icon(item.icon),
+                              selectedIcon: Icon(item.selectedIcon),
+                              label: Text(item.label),
+                            ),
+                          )
+                          .toList(),
+                    ),
                   ),
                 ),
                 const VerticalDivider(width: 1, thickness: 1),
-                Expanded(child: SafeArea(child: body)),
+                Expanded(child: SafeArea(child: widget.body)),
               ],
             ),
           );
@@ -347,18 +362,18 @@ class AppShell extends StatelessWidget {
         return Scaffold(
           appBar: AppBar(
             automaticallyImplyLeading: false,
-            leading: showBack
+            leading: widget.showBack
                 ? IconButton(
                     icon: const Icon(Icons.arrow_back),
                     tooltip: 'Go back',
                     onPressed: () => _goBack(context),
                   )
                 : null,
-            title: Text(title),
-            actions: actions,
+            title: Text(widget.title),
+            actions: widget.actions,
           ),
-          body: SafeArea(child: body),
-          bottomNavigationBar: bottomNavigationBar,
+          body: SafeArea(child: widget.body),
+          bottomNavigationBar: widget.bottomNavigationBar,
         );
       },
     );
