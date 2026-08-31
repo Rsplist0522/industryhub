@@ -306,22 +306,35 @@ class AppShell extends StatelessWidget {
             body: Row(
               children: [
                 SafeArea(
-                  child: NavigationRail(
-                    selectedIndex: selectedIndex >= 0 ? selectedIndex : 0,
-                    onDestinationSelected: (index) {
-                      if (index < 0 || index >= navItems.length) return;
-                      context.go(navItems[index].route);
+                  child: StatefulBuilder(
+                    builder: (context, setStateInner) {
+                      final expanded = MediaQuery.sizeOf(context).width >= 960;
+
+                      return AnimatedContainer(
+                        duration: const Duration(milliseconds: 200),
+                        width: expanded ? 180 : 72,
+                        curve: Curves.easeInOut,
+                        child: NavigationRail(
+                          selectedIndex: selectedIndex >= 0 ? selectedIndex : 0,
+                          onDestinationSelected: (index) {
+                            if (index < 0 || index >= navItems.length) return;
+                            context.go(navItems[index].route);
+                          },
+                          labelType: expanded
+                              ? NavigationRailLabelType.all
+                              : NavigationRailLabelType.none,
+                          destinations: navItems
+                              .map(
+                                (item) => NavigationRailDestination(
+                                  icon: Icon(item.icon),
+                                  selectedIcon: Icon(item.selectedIcon),
+                                  label: Text(item.label),
+                                ),
+                              )
+                              .toList(),
+                        ),
+                      );
                     },
-                    labelType: NavigationRailLabelType.all,
-                    destinations: navItems
-                        .map(
-                          (item) => NavigationRailDestination(
-                            icon: Icon(item.icon),
-                            selectedIcon: Icon(item.selectedIcon),
-                            label: Text(item.label),
-                          ),
-                        )
-                        .toList(),
                   ),
                 ),
                 const VerticalDivider(width: 1, thickness: 1),

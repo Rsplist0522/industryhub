@@ -54,3 +54,5 @@ node_modules/
 build/
 .dart_tool/
 
+# Widget Preview related
+.widget_preview/
