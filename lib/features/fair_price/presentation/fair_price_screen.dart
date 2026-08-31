@@ -683,6 +683,7 @@ Evidence library:
                     Expanded(
                       child: DropdownButtonFormField<String>(
                         initialValue: _condition,
+                        isExpanded: true,
                         decoration: const InputDecoration(
                           labelText: 'Material condition',
                         ),
@@ -690,7 +691,7 @@ Evidence library:
                             .map(
                               (value) => DropdownMenuItem(
                                 value: value,
-                                child: Text(value),
+                                child: Text(value, overflow: TextOverflow.ellipsis),
                               ),
                             )
                             .toList(),
@@ -705,6 +706,7 @@ Evidence library:
                     Expanded(
                       child: DropdownButtonFormField<String>(
                         initialValue: _collection,
+                        isExpanded: true,
                         decoration: const InputDecoration(
                           labelText: 'Collection terms',
                         ),
@@ -712,7 +714,7 @@ Evidence library:
                             .map(
                               (value) => DropdownMenuItem(
                                 value: value,
-                                child: Text(value),
+                                child: Text(value, overflow: TextOverflow.ellipsis),
                               ),
                             )
                             .toList(),

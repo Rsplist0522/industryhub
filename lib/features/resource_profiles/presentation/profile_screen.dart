@@ -762,7 +762,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       builder: (dialogContext) => AlertDialog(
         title: const Text('Remove this listing?'),
         content: Text(
-          '${listing.material} will be removed from your Supabase workspace and no longer appear in ReSource Marketplace.',
+          '${listing.material} will be removed and no longer appear in ReSource Marketplace.',
         ),
         actions: [
           TextButton(
@@ -783,7 +783,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Listing removed from your Supabase workspace.'),
+          content: Text('Listing removed from ReSource Marketplace.'),
         ),
       );
     } catch (_) {
@@ -949,6 +949,8 @@ class _ProfileEditor extends StatelessWidget {
               initialValue: sectors.any((item) => item.name == sector.text)
                   ? sector.text
                   : null,
+              isExpanded: true,
+              menuMaxHeight: 280,
               decoration: InputDecoration(
                 labelText: 'Industry sector',
                 helperText: 'Official DOSM MSIC sector catalogue',
@@ -962,7 +964,10 @@ class _ProfileEditor extends StatelessWidget {
                   .map(
                     (item) => DropdownMenuItem(
                       value: item.name,
-                      child: Text(item.name),
+                      child: Text(
+                        item.name,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
                   )
                   .toList(),

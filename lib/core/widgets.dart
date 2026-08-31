@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../app/theme.dart';
-import 'app_state.dart';
 
 
 class SpecDivider extends StatelessWidget {
@@ -260,23 +259,111 @@ class AppShell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        automaticallyImplyLeading: false,
-        leading: showBack
-            ? IconButton(
-                icon: const Icon(Icons.arrow_back),
-                tooltip: 'Go back',
-                onPressed: () => _goBack(context),
-              )
-            : null,
-        title: Text(title),
-        actions: actions,
-      ),
-      body: SafeArea(child: body),
-      bottomNavigationBar: bottomNavigationBar,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final useSideNavigation = constraints.maxWidth >= 700;
+
+        if (useSideNavigation) {
+          const navItems = <_NavItem>[
+            _NavItem(
+              icon: Icons.grid_view_outlined,
+              selectedIcon: Icons.grid_view,
+              label: 'Console',
+              route: '/home',
+            ),
+            _NavItem(
+              icon: Icons.storefront_outlined,
+              selectedIcon: Icons.storefront,
+              label: 'Market',
+              route: '/marketplace',
+            ),
+            _NavItem(
+              icon: Icons.person_outline,
+              selectedIcon: Icons.person,
+              label: 'Profile',
+              route: '/resource-profile',
+            ),
+          ];
+
+          final currentRoute = GoRouterState.of(context).matchedLocation;
+          final selectedIndex = navItems.indexWhere(
+            (item) => item.route == currentRoute,
+          );
+
+          return Scaffold(
+            appBar: AppBar(
+              automaticallyImplyLeading: false,
+              leading: showBack
+                  ? IconButton(
+                      icon: const Icon(Icons.arrow_back),
+                      tooltip: 'Go back',
+                      onPressed: () => _goBack(context),
+                    )
+                  : null,
+              title: Text(title),
+              actions: actions,
+            ),
+            body: Row(
+              children: [
+                SafeArea(
+                  child: NavigationRail(
+                    selectedIndex: selectedIndex >= 0 ? selectedIndex : 0,
+                    onDestinationSelected: (index) {
+                      if (index < 0 || index >= navItems.length) return;
+                      context.go(navItems[index].route);
+                    },
+                    labelType: NavigationRailLabelType.all,
+                    destinations: navItems
+                        .map(
+                          (item) => NavigationRailDestination(
+                            icon: Icon(item.icon),
+                            selectedIcon: Icon(item.selectedIcon),
+                            label: Text(item.label),
+                          ),
+                        )
+                        .toList(),
+                  ),
+                ),
+                const VerticalDivider(width: 1, thickness: 1),
+                Expanded(child: SafeArea(child: body)),
+              ],
+            ),
+          );
+        }
+
+        return Scaffold(
+          appBar: AppBar(
+            automaticallyImplyLeading: false,
+            leading: showBack
+                ? IconButton(
+                    icon: const Icon(Icons.arrow_back),
+                    tooltip: 'Go back',
+                    onPressed: () => _goBack(context),
+                  )
+                : null,
+            title: Text(title),
+            actions: actions,
+          ),
+          body: SafeArea(child: body),
+          bottomNavigationBar: bottomNavigationBar,
+        );
+      },
     );
   }
+}
+
+class _NavItem {
+  const _NavItem({
+    required this.icon,
+    required this.selectedIcon,
+    required this.label,
+    required this.route,
+  });
+
+  final IconData icon;
+  final IconData selectedIcon;
+  final String label;
+  final String route;
 }
 
 
