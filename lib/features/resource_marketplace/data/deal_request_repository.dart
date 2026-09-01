@@ -120,9 +120,7 @@ class DealRequestRepository {
           'listing_owner_id': listing.ownerId,
           'material': listing.material,
           'owner': listing.owner,
-          'requester_name': (requesterName == null || requesterName.isEmpty)
-              ? 'A ReSource business'
-              : requesterName,
+          'requester_name': requesterName,
           'location': listing.location,
           'quantity': '${listing.quantity.toStringAsFixed(0)} ${listing.unit}',
           'note': note.trim(),
