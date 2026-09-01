@@ -47,7 +47,7 @@ npx supabase link --project-ref YOUR_PROJECT_REF
 npx supabase db push
 ```
 
-If the app reports permission denied for `listings`, make sure the latest migration `202608250004_grant_authenticated_workspace_access.sql` has been applied, then sign out and sign back in so the app uses a fresh authenticated session.
+If the app reports permission errors or missing `status`/RPC functions for Marketplace, apply every migration through `202609010001_harden_marketplace_and_profiles.sql`, then sign out and sign back in so the app uses a fresh authenticated session.
 
 Alternatively, open your Supabase SQL Editor, paste and run these migration files in order:
 
@@ -60,6 +60,7 @@ supabase/migrations/202608300001_fix_deal_requests_and_auth.sql
 supabase/migrations/202608300002_add_deal_response_note.sql
 supabase/migrations/202608300003_repair_deal_request_owner_update.sql
 supabase/migrations/202608300004_fix_deal_request_statuses.sql
+supabase/migrations/202609010001_harden_marketplace_and_profiles.sql
 ```
 
 The second migration removes only the known demo rows from the previous version; it does not remove user-created listings or profiles. After the schema and cleanup exist, use the Dart-only live importer:

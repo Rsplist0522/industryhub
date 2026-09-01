@@ -436,8 +436,11 @@ Evidence library:
       );
     }
 
+    if (floor < 0) floor = 0;
+    if (ceiling < floor) ceiling = floor;
     floor = _roundToFiftySen(floor);
     ceiling = _roundToFiftySen(ceiling);
+    if (ceiling < floor) ceiling = floor;
     final target = _roundToFiftySen((floor + ceiling) / 2);
 
     final strategy = proposedPrice < floor

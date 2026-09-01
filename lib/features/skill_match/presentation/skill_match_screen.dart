@@ -257,7 +257,7 @@ class _SkillMatchScreenState extends ConsumerState<SkillMatchScreen> {
         lower.contains('developer') ||
         lower.contains('programming') ||
         lower.contains('coding') ||
-        lower.contains('engineer') ||
+        lower.contains('software engineer') ||
         lower.contains('web development') ||
         lower.contains('data analyst');
     return _Requirement(
@@ -373,7 +373,7 @@ class _SkillMatchScreenState extends ConsumerState<SkillMatchScreen> {
       'developer',
       'programming',
       'coding',
-      'engineer',
+      'software engineer',
     ]);
     addSkill('Web development', [
       'web',
@@ -395,8 +395,10 @@ class _SkillMatchScreenState extends ConsumerState<SkillMatchScreen> {
             lower.contains('developer') ||
             lower.contains('programming') ||
             lower.contains('coding') ||
-            lower.contains('engineer')
+            lower.contains('software engineer')
         ? 'Software engineer / developer'
+        : lower.contains('engineer')
+        ? 'Engineering role to be clarified'
         : lower.contains('cnc')
         ? 'CNC operator / technician'
         : lower.contains('weld')
@@ -458,7 +460,7 @@ class _SkillMatchScreenState extends ConsumerState<SkillMatchScreen> {
         : lower.contains('software') ||
               lower.contains('developer') ||
               lower.contains('coding') ||
-              lower.contains('engineer')
+              lower.contains('software engineer')
         ? 'Industry-recognised software certificate recommended'
         : 'Relevant industry certificate recommended';
 

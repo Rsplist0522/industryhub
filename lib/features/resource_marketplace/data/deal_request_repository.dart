@@ -96,41 +96,23 @@ class DealRequestRepository {
       throw StateError('You cannot send a request to your own listing.');
     }
 
-    final requesterProfile = await _supabase
-        .from('profiles')
-        .select('business_name, sector')
-        .eq('user_id', user.id)
-        .maybeSingle();
-    final requesterName =
-        (requesterProfile?['business_name'] as String?)?.trim();
-    final requesterSector =
-        (requesterProfile?['sector'] as String?)?.trim();
-    if ((requesterName == null || requesterName.isEmpty) ||
-        (requesterSector == null || requesterSector.isEmpty)) {
-      throw StateError(
-        'Complete your business name and industry sector before sending a deal request.',
+    try {
+      final createdRow = await _supabase.rpc(
+        'create_deal_request',
+        params: {
+          'p_listing_id': listing.id,
+          'p_note': note.trim(),
+        },
       );
+      if (createdRow is! Map) {
+        throw StateError('The deal request could not be created.');
+      }
+      return DealRequestRecord.fromSupabase(
+        Map<String, dynamic>.from(createdRow),
+      );
+    } on PostgrestException catch (error) {
+      throw StateError(error.message);
     }
-
-    final createdRow = await _supabase
-        .from('deal_requests')
-        .insert({
-          'listing_id': listing.id,
-          'requester_id': user.id,
-          'listing_owner_id': listing.ownerId,
-          'material': listing.material,
-          'owner': listing.owner,
-          'requester_name': requesterName,
-          'location': listing.location,
-          'quantity': '${listing.quantity.toStringAsFixed(0)} ${listing.unit}',
-          'note': note.trim(),
-        })
-        .select()
-        .single();
-
-    return DealRequestRecord.fromSupabase(
-      Map<String, dynamic>.from(createdRow),
-    );
   }
 
   Future<List<DealRequestRecord>> fetchOutgoingRequests() async {
@@ -157,14 +139,14 @@ class DealRequestRepository {
       throw StateError('Sign in before cancelling a deal request.');
     }
 
-    await _supabase
-        .from('deal_requests')
-        .update({
-          'status': 'CANCELLED',
-          'updated_at': DateTime.now().toIso8601String(),
-        })
-        .eq('id', requestId)
-        .eq('requester_id', user.id);
+    try {
+      await _supabase.rpc(
+        'cancel_deal_request',
+        params: {'p_request_id': requestId},
+      );
+    } on PostgrestException catch (error) {
+      throw StateError(error.message);
+    }
   }
 
   /// Requests sent TO listings this user owns, i.e. the ones only the
@@ -188,8 +170,8 @@ class DealRequestRepository {
   }
 
   /// Accept or reject a request sent to one of the current user's listings.
-  /// The `.eq('listing_owner_id', user.id)` guard, backed by the matching
-  /// RLS policy, is what stops anyone but the listing owner from doing this.
+  /// The database RPC verifies the signed-in user is the listing owner and
+  /// performs the status transition atomically.
   Future<void> respondToRequest(
     String requestId, {
     required bool accept,
@@ -200,42 +182,17 @@ class DealRequestRepository {
       throw StateError('Sign in before responding to a deal request.');
     }
 
-    final requestRow = await _supabase
-        .from('deal_requests')
-        .select('listing_id')
-        .eq('id', requestId)
-        .eq('listing_owner_id', user.id)
-        .maybeSingle();
-
-    if (requestRow == null) {
-      throw StateError('This request is no longer available to accept.');
-    }
-
-    final listingId = requestRow['listing_id'] as String?;
-
-    await _supabase
-        .from('deal_requests')
-        .update({
-          'status': accept ? 'ACCEPTED' : 'REJECTED',
-          'response_note': accept ? '' : reason.trim(),
-          'updated_at': DateTime.now().toIso8601String(),
-        })
-        .eq('id', requestId)
-        .eq('listing_owner_id', user.id);
-
-    if (accept && listingId != null && listingId.isNotEmpty) {
-      await _supabase
-          .from('deal_requests')
-          .update({
-            'status': 'REJECTED',
-            'response_note': 'This listing was accepted by another business and is no longer available.',
-            'updated_at': DateTime.now().toIso8601String(),
-          })
-          .eq('listing_id', listingId)
-          .neq('id', requestId)
-          .inFilter('status', ['REQUEST SENT']);
-
-      await _supabase.from('listings').delete().eq('id', listingId);
+    try {
+      await _supabase.rpc(
+        'respond_to_deal_request',
+        params: {
+          'p_request_id': requestId,
+          'p_accept': accept,
+          'p_reason': reason.trim(),
+        },
+      );
+    } on PostgrestException catch (error) {
+      throw StateError(error.message);
     }
   }
 

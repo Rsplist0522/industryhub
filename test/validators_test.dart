@@ -26,6 +26,12 @@ void main() {
       expect(validatePassword('StrongPass123'), isNull);
     });
 
+    test('login only requires a non-empty password before server authentication', () {
+      expect(validateLoginPassword(''), isNotNull);
+      expect(validateLoginPassword('legacy-password'), isNull);
+      expect(validateLoginPassword('123'), isNull);
+    });
+
     test(
       'describes AI provider errors without exposing oversized diagnostics',
       () {
@@ -38,7 +44,7 @@ void main() {
           contains('AI provider returned HTTP 404.'),
         );
         expect(describeAiError(''), isNotEmpty);
-        expect(describeAiError('x' * 500), hasLength(321));
+        expect(describeAiError('x'.padRight(500, 'x')), hasLength(321));
       },
     );
 

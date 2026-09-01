@@ -46,8 +46,27 @@ void main() {
       expect(listing.quantity, 125.5);
       expect(listing.askingPricePerKg, 4.25);
       expect(listing.verified, isTrue);
+      expect(listing.quantityLabel, '125.5');
+      expect(listing.status, 'ACTIVE');
     });
 
+
+
+    test('preserves fractional listing quantities for marketplace display', () {
+      final listing = Listing.fromSupabase({
+        'id': 'listing-fraction',
+        'type': 'supply',
+        'material': 'Copper',
+        'quantity': 0.25,
+        'unit': 'kg',
+        'location': 'Johor',
+        'description': '',
+        'owner': 'Example SME',
+        'owner_id': 'user-1',
+      });
+
+      expect(listing.quantityLabel, '0.25');
+    });
     test('maps training programme skills and duration', () {
       final programme = TrainingProgramme.fromSupabase({
         'id': 'course-1',

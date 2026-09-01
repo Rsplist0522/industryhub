@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../features/auth/presentation/auth_screens.dart';
 import '../features/fair_price/presentation/fair_price_screen.dart';
 import '../features/home/presentation/home_screen.dart';
@@ -9,6 +10,20 @@ import '../features/skill_match/presentation/skill_match_screen.dart';
 
 final appRouter = GoRouter(
   initialLocation: '/splash',
+  redirect: (context, state) {
+    var hasSession = false;
+    try {
+      hasSession = Supabase.instance.client.auth.currentSession != null;
+    } catch (_) {
+      // Supabase may not be initialised yet in isolated widget tests.
+    }
+    final location = state.matchedLocation;
+    final publicRoute = location == '/splash' ||
+        location == '/login' ||
+        location == '/signup';
+    if (!hasSession && !publicRoute) return '/login';
+    return null;
+  },
   routes: [
     GoRoute(path: '/splash', name: 'splash', builder: (context, state) => const SplashScreen()),
     GoRoute(path: '/login', name: 'login', builder: (context, state) => const LoginScreen()),

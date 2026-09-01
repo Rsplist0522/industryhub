@@ -47,6 +47,7 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
   final _transactions = <DealRequestRecord>[];
   final _incomingRequests = <DealRequestRecord>[];
   final _requestedListingKeys = <String>{};
+  final _knownTerminalRequestIds = <String>{};
   final _marketplaceAiInput = TextEditingController();
   final _aiService = const AiService();
   StreamSubscription<List<DealRequestRecord>>? _outgoingSubscription;
@@ -125,6 +126,18 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
     _outgoingSubscription = _dealRequestRepository.watchOutgoingRequests().listen(
       (requests) {
         if (!mounted) return;
+        final terminalIds = requests
+            .where(
+              (request) =>
+                  request.status == 'ACCEPTED' || request.status == 'REJECTED',
+            )
+            .map((request) => request.id)
+            .toSet();
+        final hasNewTerminalRequest =
+            terminalIds.difference(_knownTerminalRequestIds).isNotEmpty;
+        _knownTerminalRequestIds
+          ..clear()
+          ..addAll(terminalIds);
         setState(() {
           _transactions
             ..clear()
@@ -133,12 +146,18 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
             ..clear()
             ..addAll(
               requests
-                  .where((request) => request.status != 'CANCELLED')
-                  .map((request) => request.listingId),
+                  .where((request) => request.status == 'REQUEST SENT')
+                  .map((request) => request.listingId)
+                  .where((listingId) => listingId.isNotEmpty),
             );
           _isLoadingHistory = false;
           _historyError = null;
         });
+        if (hasNewTerminalRequest) {
+          Future<void>.microtask(
+            () => ref.read(appStateProvider.notifier).refreshSupabaseData(),
+          );
+        }
       },
       onError: (Object error) {
         if (!mounted) return;
@@ -208,10 +227,15 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
       );
     } catch (error) {
       if (!mounted) return;
+      final message = switch (error) {
+        StateError stateError => stateError.message.toString(),
+        PostgrestException postgrestError => postgrestError.message,
+        _ => '$error',
+      };
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'Could not decline this request: ${error is PostgrestException ? error.message : error}',
+            'Could not ${accept ? 'accept' : 'decline'} this request: $message',
           ),
         ),
       );
@@ -336,7 +360,7 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
             'type': listing.type,
             'material': listing.material,
             'quantity':
-                '${listing.quantity.toStringAsFixed(0)} ${listing.unit}',
+                '${listing.quantityLabel} ${listing.unit}',
             'location': listing.location,
             'owner': listing.owner,
             'asking_price_per_kg': listing.askingPricePerKg,
@@ -762,7 +786,7 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
     if (_material == listing.material) return 'Material filter match';
     if (_location == listing.location) return 'Location filter match';
     if (listing.verified) return 'Verified ReSource business';
-    return 'Prototype marketplace match';
+    return 'Marketplace relevance';
   }
 
   void _goHome() {
@@ -777,6 +801,7 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
   Future<void> _showDetail(Listing listing) async {
     final isSupply = listing.type == 'supply';
     final requested = _requestedListingKeys.contains(_listingKey(listing));
+    final isOwnListing = listing.ownerId == ref.read(appStateProvider).userId;
 
     await showModalBottomSheet<void>(
       context: context,
@@ -814,7 +839,7 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
                 _DetailLine(
                   label: 'Quantity',
                   value:
-                      '${listing.quantity.toStringAsFixed(0)} ${listing.unit}',
+                      '${listing.quantityLabel} ${listing.unit}',
                 ),
                 if (listing.askingPricePerKg != null)
                   _DetailLine(
@@ -830,13 +855,13 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
                     value: 'Verified ReSource business',
                   ),
                 _DetailLine(
-                  label: 'Local match signal',
+                  label: 'Search relevance',
                   value: '${_matchScore(listing)}% · ${_matchLabel(listing)}',
                 ),
                 const Padding(
                   padding: EdgeInsets.only(bottom: 12),
                   child: Text(
-                    'Prototype match signal only — confirm material grade, unit and collection terms directly with the business.',
+                    'Prototype relevance score only — confirm material grade, unit and collection terms directly with the business.',
                     style: TextStyle(
                       color: AppColors.slate,
                       fontSize: 12,
@@ -845,7 +870,16 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
                   ),
                 ),
                 const SizedBox(height: 16),
-                if (requested)
+                if (isOwnListing)
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: null,
+                      icon: const Icon(Icons.storefront_outlined),
+                      label: const Text('Your listing'),
+                    ),
+                  )
+                else if (requested)
                   SizedBox(
                     width: double.infinity,
                     child: OutlinedButton.icon(
@@ -897,6 +931,12 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
   }
 
   Future<void> _showDealRequestDialog(Listing listing) async {
+    if (listing.ownerId == ref.read(appStateProvider).userId) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('You cannot send a request to your own listing.')),
+      );
+      return;
+    }
     if (!ref.read(appStateProvider).profile.hasRequiredProfileIdentity) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -943,7 +983,7 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Text(
-                'Request summary: ${listing.quantity.toStringAsFixed(0)} ${listing.unit} of ${listing.material} from ${listing.owner}. A sent request is not a completed deal; both businesses must agree separately.',
+                'Request summary: ${listing.quantityLabel} ${listing.unit} of ${listing.material} from ${listing.owner}. A sent request is not a completed deal; both businesses must agree separately.',
                 style: const TextStyle(
                   color: AppColors.slate,
                   fontSize: 12,
@@ -1815,7 +1855,7 @@ class _MarketplaceCard extends StatelessWidget {
               Row(
                 children: [
                   Text(
-                    '${listing.quantity.toStringAsFixed(0)} ${listing.unit}',
+                    '${listing.quantityLabel} ${listing.unit}',
                     style: AppTheme.dataStyle.copyWith(fontSize: 14),
                   ),
                   const SizedBox(width: 12),
@@ -1849,7 +1889,7 @@ class _MarketplaceCard extends StatelessWidget {
                     ),
                   ),
                   Text(
-                    '$matchScore%',
+                    'Relevance $matchScore%',
                     style: AppTheme.dataStyle.copyWith(
                       color: AppColors.green,
                       fontSize: 12,

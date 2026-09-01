@@ -69,7 +69,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     final state = ref.watch(appStateProvider);
     final profile = state.profile;
     final ownListings = state.listings
-        .where((item) => item.owner == profile.businessName)
+        .where((item) => item.ownerId == state.userId)
         .toList();
     final hasIdentity =
         profile.businessName.trim().isNotEmpty &&
@@ -113,13 +113,15 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       const SizedBox(width: 10),
                       Expanded(
                         child: Text(
-                          profile.businessName,
+                          profile.businessName.trim().isEmpty
+                              ? 'Business profile'
+                              : profile.businessName,
                           style: Theme.of(context).textTheme.titleLarge,
                         ),
                       ),
-                      const StatusChip(
-                        label: 'PROFILE READY',
-                        color: AppColors.green,
+                      StatusChip(
+                        label: hasIdentity ? 'PROFILE READY' : 'PROFILE INCOMPLETE',
+                        color: hasIdentity ? AppColors.green : AppColors.rust,
                       ),
                     ],
                   ),
@@ -156,9 +158,11 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                             '${profile.msicCode} · ${profile.msicDescription ?? profile.sector}',
                       ),
                     _ProfileLine(label: 'Account role', value: profile.role),
-                    const _ProfileLine(
+                    _ProfileLine(
                       label: 'Review status',
-                      value: 'Ready for business review',
+                      value: hasIdentity
+                          ? 'Ready for business review'
+                          : 'Complete business name and industry sector',
                     ),
                     const SizedBox(height: 8),
                     OutlinedButton.icon(
@@ -217,9 +221,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             label: 'Industry sector',
             complete: profile.sector.trim().isNotEmpty,
           ),
-          const _ChecklistRow(
+          _ChecklistRow(
             label: 'Profile ready for review',
-            complete: true,
+            complete: hasIdentity,
           ),
           _ChecklistRow(
             label: 'First marketplace listing',
@@ -319,6 +323,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             sector: sector,
             msicCode: selectedSector?.code,
             msicDescription: selectedSector?.name,
+            clearMsic: selectedSector == null && sector != ref.read(appStateProvider).profile.sector,
           );
       if (!mounted) return;
       setState(() => _editing = false);
@@ -1109,7 +1114,7 @@ class _ListingRow extends StatelessWidget {
           style: const TextStyle(fontWeight: FontWeight.w700),
         ),
         subtitle: Text(
-          '${listing.quantity.toStringAsFixed(0)} ${listing.unit} · ${listing.location}\n${isSupply ? 'Supply listing' : 'Demand listing'}${listing.askingPricePerKg == null ? '' : ' · RM ${listing.askingPricePerKg!.toStringAsFixed(2)}/kg'}',
+          '${listing.quantityLabel} ${listing.unit} · ${listing.location}\n${isSupply ? 'Supply listing' : 'Demand listing'}${listing.askingPricePerKg == null ? '' : ' · RM ${listing.askingPricePerKg!.toStringAsFixed(2)}/kg'}',
         ),
         isThreeLine: true,
         trailing: PopupMenuButton<String>(

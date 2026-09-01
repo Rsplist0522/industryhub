@@ -248,6 +248,7 @@ class MarketPriceRepository {
           'material, asking_price_per_kg, quantity, unit, location, created_at',
         )
         .ilike('material', '%$query%')
+        .eq('status', 'ACTIVE')
         .not('asking_price_per_kg', 'is', null)
         .order('created_at', ascending: false)
         .limit(50);

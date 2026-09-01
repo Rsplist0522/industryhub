@@ -1,10 +1,29 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../app/theme.dart';
+import '../../../core/app_state.dart';
 import '../../../core/widgets.dart';
 import '../../../core/validators.dart';
+
+
+Future<String> _signedInDestination() async {
+  final user = Supabase.instance.client.auth.currentUser;
+  if (user == null) return '/login';
+  try {
+    final row = await Supabase.instance.client
+        .from('profiles')
+        .select('role')
+        .eq('user_id', user.id)
+        .maybeSingle();
+    final role = (row?['role'] as String?)?.trim() ?? '';
+    return role.isEmpty ? '/role-select' : '/home';
+  } catch (_) {
+    return '/home';
+  }
+}
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -29,7 +48,12 @@ class _SplashScreenState extends State<SplashScreen> {
     } catch (_) {
       // Widget tests or an interrupted bootstrap are treated as signed out.
     }
-    if (mounted) context.go(hasSession ? '/home' : '/login');
+    if (!mounted) return;
+    if (!hasSession) {
+      context.go('/login');
+      return;
+    }
+    context.go(await _signedInDestination());
   }
 
   @override
@@ -106,7 +130,7 @@ class _LoginScreenState extends State<LoginScreen> {
         email: _email.text.trim(),
         password: _password.text,
       );
-      if (mounted) context.go('/home');
+      if (mounted) context.go(await _signedInDestination());
     } on AuthException catch (error) {
       if (mounted) setState(() => _errorMessage = error.message);
     } catch (_) {
@@ -168,7 +192,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         labelText: 'Password',
                         prefixIcon: Icon(Icons.lock_outline),
                       ),
-                      validator: validatePassword,
+                      validator: validateLoginPassword,
                     ),
                     const SizedBox(height: 20),
                     if (_errorMessage != null) ...[
@@ -232,6 +256,7 @@ class _SignupScreenState extends State<SignupScreen> {
   final _email = TextEditingController();
   final _password = TextEditingController();
   String? _errorMessage;
+  String? _infoMessage;
   bool _isLoading = false;
 
   @override
@@ -249,12 +274,17 @@ class _SignupScreenState extends State<SignupScreen> {
     setState(() {
       _isLoading = true;
       _errorMessage = null;
+      _infoMessage = null;
     });
     try {
       final response = await Supabase.instance.client.auth.signUp(
         email: _email.text.trim(),
         password: _password.text,
-        data: {'business_name': businessName},
+        data: {
+          'business_name': businessName,
+          'sector': 'General manufacturing',
+          'role': '',
+        },
       );
       final user = response.user;
       if (user == null) throw const AuthException('Account creation failed.');
@@ -262,19 +292,21 @@ class _SignupScreenState extends State<SignupScreen> {
         if (!mounted) return;
         setState(() {
           _isLoading = false;
-          _errorMessage =
+          _infoMessage =
               'Account created. Check your email to confirm the account, then sign in.';
         });
         return;
       }
 
-      await Supabase.instance.client.from('profiles').upsert({
-        'user_id': user.id,
-        'business_name': businessName,
-        'sector': 'General manufacturing',
-        'role': 'Factory owner',
-      });
-      if (mounted) context.go('/home');
+      await Supabase.instance.client
+          .from('profiles')
+          .update({
+            'business_name': businessName,
+            'sector': 'General manufacturing',
+            'role': '',
+          })
+          .eq('user_id', user.id);
+      if (mounted) context.go('/role-select');
     } on AuthException catch (error) {
       if (mounted) setState(() => _errorMessage = error.message);
     } catch (_) {
@@ -331,6 +363,10 @@ class _SignupScreenState extends State<SignupScreen> {
                 validator: validatePassword,
               ),
               const SizedBox(height: 22),
+              if (_infoMessage != null) ...[
+                _AuthNotice(message: _infoMessage!),
+                const SizedBox(height: 14),
+              ],
               if (_errorMessage != null) ...[
                 _AuthError(message: _errorMessage!),
                 const SizedBox(height: 14),
@@ -356,6 +392,27 @@ class _SignupScreenState extends State<SignupScreen> {
   }
 }
 
+class _AuthNotice extends StatelessWidget {
+  const _AuthNotice({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    width: double.infinity,
+    padding: const EdgeInsets.all(12),
+    decoration: BoxDecoration(
+      color: AppColors.green.withValues(alpha: 0.10),
+      borderRadius: BorderRadius.circular(8),
+      border: Border.all(color: AppColors.green.withValues(alpha: 0.35)),
+    ),
+    child: Text(
+      message,
+      style: const TextStyle(color: AppColors.green, height: 1.35),
+    ),
+  );
+}
+
 class _AuthError extends StatelessWidget {
   const _AuthError({required this.message});
 
@@ -377,15 +434,18 @@ class _AuthError extends StatelessWidget {
   );
 }
 
-class RoleSelectScreen extends StatefulWidget {
+class RoleSelectScreen extends ConsumerStatefulWidget {
   const RoleSelectScreen({super.key});
 
   @override
-  State<RoleSelectScreen> createState() => _RoleSelectScreenState();
+  ConsumerState<RoleSelectScreen> createState() => _RoleSelectScreenState();
 }
 
-class _RoleSelectScreenState extends State<RoleSelectScreen> {
+class _RoleSelectScreenState extends ConsumerState<RoleSelectScreen> {
   String selected = 'Factory owner';
+  bool _isSaving = false;
+  String? _errorMessage;
+
   final roles = const [
     (
       'Factory owner',
@@ -404,6 +464,35 @@ class _RoleSelectScreenState extends State<RoleSelectScreen> {
     ),
   ];
 
+  Future<void> _saveRole() async {
+    if (_isSaving) return;
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user == null) {
+      if (mounted) context.go('/login');
+      return;
+    }
+    setState(() {
+      _isSaving = true;
+      _errorMessage = null;
+    });
+    try {
+      await Supabase.instance.client
+          .from('profiles')
+          .update({'role': selected})
+          .eq('user_id', user.id);
+      await ref.read(appStateProvider.notifier).refreshSupabaseData();
+      if (mounted) context.go('/home');
+    } on PostgrestException catch (error) {
+      if (mounted) setState(() => _errorMessage = error.message);
+    } catch (_) {
+      if (mounted) {
+        setState(() => _errorMessage = 'Role could not be saved. Please try again.');
+      }
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return AppShell(
@@ -416,7 +505,7 @@ class _RoleSelectScreenState extends State<RoleSelectScreen> {
             eyebrow: 'INDUSTRYHUB / ROLE',
             title: 'What are you here to do?',
             description:
-                'This tunes your dashboard. You can still access every module later.',
+                'This records your primary role. You can still access every module later.',
           ),
           const SizedBox(height: 22),
           RadioGroup<String>(
@@ -454,9 +543,19 @@ class _RoleSelectScreenState extends State<RoleSelectScreen> {
             ),
           ),
           const SizedBox(height: 10),
+          if (_errorMessage != null) ...[
+            _AuthError(message: _errorMessage!),
+            const SizedBox(height: 12),
+          ],
           FilledButton(
-            onPressed: () => context.go('/home'),
-            child: const Text('Enter IndustryHub'),
+            onPressed: _isSaving ? null : _saveRole,
+            child: _isSaving
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Text('Enter IndustryHub'),
           ),
         ],
       ),
