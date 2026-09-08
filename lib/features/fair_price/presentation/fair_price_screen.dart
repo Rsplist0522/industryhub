@@ -4,7 +4,6 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../app/theme.dart';
@@ -198,6 +197,18 @@ class _FairPriceScreenState extends ConsumerState<FairPriceScreen> {
 
   Future<void> _start() async {
     if (!(_formKey.currentState?.validate() ?? false) || _isRunning) return;
+    if (!ref.read(appStateProvider).profile.hasRequiredProfileIdentity) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Complete your business profile before running a FairPrice negotiation.',
+          ),
+          duration: Duration(seconds: 3),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
 
     final product = _product.text.trim();
     final quantity = double.parse(_quantity.text.trim());
@@ -425,8 +436,11 @@ Evidence library:
       );
     }
 
+    if (floor < 0) floor = 0;
+    if (ceiling < floor) ceiling = floor;
     floor = _roundToFiftySen(floor);
     ceiling = _roundToFiftySen(ceiling);
+    if (ceiling < floor) ceiling = floor;
     final target = _roundToFiftySen((floor + ceiling) / 2);
 
     final strategy = proposedPrice < floor
@@ -550,14 +564,6 @@ Evidence library:
     });
   }
 
-  void _goBack() {
-    if (context.canPop()) {
-      context.pop();
-    } else {
-      context.go('/home');
-    }
-  }
-
   String? _requiredText(String? value) =>
       validateRequiredText(value, label: 'a material or product name');
 
@@ -581,22 +587,16 @@ Evidence library:
       ...liveMaterials.where((material) => !_materials.contains(material)),
     ];
 
-    return Scaffold(
-      appBar: AppBar(
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          tooltip: 'Go back',
-          onPressed: _goBack,
+    return AppShell(
+      title: 'FairPrice Advisor',
+      showBack: true,
+      actions: [
+        IconButton(
+          icon: const Icon(Icons.restart_alt),
+          tooltip: 'Reset scenario',
+          onPressed: (_isRunning || _isChatThinking) ? null : _resetScenario,
         ),
-        title: const Text('FairPrice Advisor'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.restart_alt),
-            tooltip: 'Reset scenario',
-            onPressed: (_isRunning || _isChatThinking) ? null : _resetScenario,
-          ),
-        ],
-      ),
+      ],
       body: ListView(
         padding: const EdgeInsets.fromLTRB(20, 20, 20, 30),
         children: [
@@ -685,6 +685,7 @@ Evidence library:
                     Expanded(
                       child: DropdownButtonFormField<String>(
                         initialValue: _condition,
+                        isExpanded: true,
                         decoration: const InputDecoration(
                           labelText: 'Material condition',
                         ),
@@ -692,7 +693,7 @@ Evidence library:
                             .map(
                               (value) => DropdownMenuItem(
                                 value: value,
-                                child: Text(value),
+                                child: Text(value, overflow: TextOverflow.ellipsis),
                               ),
                             )
                             .toList(),
@@ -707,6 +708,7 @@ Evidence library:
                     Expanded(
                       child: DropdownButtonFormField<String>(
                         initialValue: _collection,
+                        isExpanded: true,
                         decoration: const InputDecoration(
                           labelText: 'Collection terms',
                         ),
@@ -714,7 +716,7 @@ Evidence library:
                             .map(
                               (value) => DropdownMenuItem(
                                 value: value,
-                                child: Text(value),
+                                child: Text(value, overflow: TextOverflow.ellipsis),
                               ),
                             )
                             .toList(),
@@ -1400,3 +1402,4 @@ class _RangeLine extends StatelessWidget {
     );
   }
 }
+

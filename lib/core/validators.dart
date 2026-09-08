@@ -17,6 +17,12 @@ String? validateEmail(String? value) {
   return valid ? null : 'Enter a valid email address.';
 }
 
+String? validateLoginPassword(String? value) {
+  final password = value ?? '';
+  if (password.isEmpty) return 'Enter your password.';
+  return null;
+}
+
 String? validatePassword(String? value) {
   final password = value ?? '';
   if (password.length < 8) return 'Use at least 8 characters.';

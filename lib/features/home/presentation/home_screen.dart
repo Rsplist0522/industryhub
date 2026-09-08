@@ -30,24 +30,33 @@ class HomeScreen extends ConsumerWidget {
     final state = ref.watch(appStateProvider);
     final profile = state.profile;
     final now = DateTime.now();
+    final profileReady = profile.hasRequiredProfileIdentity;
     final hasListings = state.activeListings > 0;
-    final actionRoute = !hasListings
+    final actionRoute = !profileReady
+        ? '/resource-profile'
+        : !hasListings
         ? '/resource-profile'
         : state.savedMatches == 0
         ? '/skill-match'
         : '/fair-price';
-    final actionLabel = !hasListings
-        ? 'Publish a listing'
+    final actionLabel = !profileReady
+        ? 'Complete your profile'
+        : !hasListings
+        ? 'Add your first listing'
         : state.savedMatches == 0
         ? 'Find a training match'
         : 'Run a price check';
-    final actionTitle = !hasListings
-        ? 'Make your business discoverable'
+    final actionTitle = !profileReady
+        ? 'Set up your business identity'
+        : !hasListings
+        ? 'Publish your first listing'
         : state.savedMatches == 0
         ? 'Build your team capability plan'
         : 'Pressure-test your next quote';
-    final actionDescription = !hasListings
-        ? 'Add one supply or demand listing to start receiving relevant marketplace matches.'
+    final actionDescription = !profileReady
+        ? 'Add your business name and industry sector before you unlock marketplace and matching features.'
+        : !hasListings
+        ? 'Publish a supply or demand listing so your business becomes discoverable in the local marketplace.'
         : state.savedMatches == 0
         ? 'Describe a workforce need and save a shortlist of suitable programmes.'
         : 'Use the benchmark-led advisor before you commit to a material price.';

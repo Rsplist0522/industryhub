@@ -9,6 +9,23 @@ import 'package:industryhub/features/resource_marketplace/data/industrial_contex
 import 'package:industryhub/features/skill_match/data/training_programme_repository.dart';
 
 void main() {
+  group('Profile readiness rules', () {
+    test('requires business name and sector before unlocking matching features', () {
+      expect(const CompanyProfile().hasRequiredProfileIdentity, isFalse);
+      expect(
+        const CompanyProfile(businessName: 'Sunrise Foundry').hasRequiredProfileIdentity,
+        isFalse,
+      );
+      expect(
+        const CompanyProfile(
+          businessName: 'Sunrise Foundry',
+          sector: 'Machinery and equipment',
+        ).hasRequiredProfileIdentity,
+        isTrue,
+      );
+    });
+  });
+
   group('Supabase row mappers', () {
     test('maps listing numeric and nullable fields safely', () {
       final listing = Listing.fromSupabase({
@@ -29,8 +46,27 @@ void main() {
       expect(listing.quantity, 125.5);
       expect(listing.askingPricePerKg, 4.25);
       expect(listing.verified, isTrue);
+      expect(listing.quantityLabel, '125.5');
+      expect(listing.status, 'ACTIVE');
     });
 
+
+
+    test('preserves fractional listing quantities for marketplace display', () {
+      final listing = Listing.fromSupabase({
+        'id': 'listing-fraction',
+        'type': 'supply',
+        'material': 'Copper',
+        'quantity': 0.25,
+        'unit': 'kg',
+        'location': 'Johor',
+        'description': '',
+        'owner': 'Example SME',
+        'owner_id': 'user-1',
+      });
+
+      expect(listing.quantityLabel, '0.25');
+    });
     test('maps training programme skills and duration', () {
       final programme = TrainingProgramme.fromSupabase({
         'id': 'course-1',

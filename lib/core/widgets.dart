@@ -1,10 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import '../app/theme.dart';
+
 
 class SpecDivider extends StatelessWidget {
   const SpecDivider({super.key, this.label});
 
+
   final String? label;
+
 
   @override
   Widget build(BuildContext context) {
@@ -24,21 +29,27 @@ class SpecDivider extends StatelessWidget {
   }
 }
 
+
 class Eyebrow extends StatelessWidget {
   const Eyebrow(this.text, {super.key, this.color});
 
+
   final String text;
   final Color? color;
+
 
   @override
   Widget build(BuildContext context) => Text(text.toUpperCase(), style: AppTheme.eyebrowStyle.copyWith(color: color));
 }
 
+
 class StatusChip extends StatelessWidget {
   const StatusChip({super.key, required this.label, required this.color});
 
+
   final String label;
   final Color color;
+
 
   @override
   Widget build(BuildContext context) {
@@ -61,6 +72,7 @@ class StatusChip extends StatelessWidget {
   }
 }
 
+
 class ModuleCard extends StatelessWidget {
   const ModuleCard({
     super.key,
@@ -72,12 +84,14 @@ class ModuleCard extends StatelessWidget {
     this.accent = AppColors.navy,
   });
 
+
   final String eyebrow;
   final String title;
   final String description;
   final IconData icon;
   final VoidCallback onTap;
   final Color accent;
+
 
   @override
   Widget build(BuildContext context) {
@@ -117,10 +131,13 @@ class ModuleCard extends StatelessWidget {
   }
 }
 
+
 class MetricStrip extends StatelessWidget {
   const MetricStrip({super.key, required this.metrics});
 
+
   final List<MapEntry<String, String>> metrics;
+
 
   @override
   Widget build(BuildContext context) {
@@ -147,11 +164,14 @@ class MetricStrip extends StatelessWidget {
   }
 }
 
+
 class ChatBubble extends StatelessWidget {
   const ChatBubble({super.key, required this.text, required this.isUser});
 
+
   final String text;
   final bool isUser;
+
 
   @override
   Widget build(BuildContext context) {
@@ -177,12 +197,15 @@ class ChatBubble extends StatelessWidget {
   }
 }
 
+
 class PageIntro extends StatelessWidget {
   const PageIntro({super.key, required this.eyebrow, required this.title, required this.description});
+
 
   final String eyebrow;
   final String title;
   final String description;
+
 
   @override
   Widget build(BuildContext context) {
@@ -199,25 +222,232 @@ class PageIntro extends StatelessWidget {
   }
 }
 
-class AppShell extends StatelessWidget {
-  const AppShell({super.key, required this.title, required this.body, this.actions, this.showBack = false, this.bottomNavigationBar});
+
+class AppShell extends StatefulWidget {
+  const AppShell({
+    super.key,
+    required this.title,
+    required this.body,
+    this.actions,
+    this.showBack = false,
+    this.bottomNavigationBar,
+    this.fallbackRoute = '/home',
+  });
+
 
   final String title;
   final Widget body;
   final List<Widget>? actions;
   final bool showBack;
   final Widget? bottomNavigationBar;
+  // Where "back" should land when there is nothing left to pop, e.g. when a
+  // screen was reached via context.go() (which clears the navigation stack)
+  // rather than context.push(). automaticallyImplyLeading alone can't do
+  // this — it only shows a back arrow if canPop() is already true, so a
+  // page opened with go() silently loses its back button.
+  final String fallbackRoute;
+
+
+  @override
+  State<AppShell> createState() => _AppShellState();
+}
+
+class _AppShellState extends State<AppShell> {
+  late final GlobalKey<ScaffoldState> _scaffoldKey;
+
+  @override
+  void initState() {
+    super.initState();
+    _scaffoldKey = GlobalKey<ScaffoldState>();
+  }
+
+  void _goBack(BuildContext context) {
+    if (context.canPop()) {
+      context.pop();
+    } else {
+      context.go(widget.fallbackRoute);
+    }
+  }
+
+  void _navigateTo(String route) {
+    context.go(route);
+    if (_scaffoldKey.currentState?.isDrawerOpen ?? false) {
+      Navigator.of(context).pop();
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        automaticallyImplyLeading: showBack,
-        title: Text(title),
-        actions: actions,
-      ),
-      body: SafeArea(child: body),
-      bottomNavigationBar: bottomNavigationBar,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final useSideNavigation = constraints.maxWidth >= 700;
+
+        if (useSideNavigation) {
+          const navItems = <_NavItem>[
+            _NavItem(
+              icon: Icons.grid_view_outlined,
+              selectedIcon: Icons.grid_view,
+              label: 'Console',
+              route: '/home',
+            ),
+            _NavItem(
+              icon: Icons.storefront_outlined,
+              selectedIcon: Icons.storefront,
+              label: 'Market',
+              route: '/marketplace',
+            ),
+            _NavItem(
+              icon: Icons.person_outline,
+              selectedIcon: Icons.person,
+              label: 'Profile',
+              route: '/resource-profile',
+            ),
+          ];
+
+          final currentRoute = GoRouterState.of(context).matchedLocation;
+
+          return Scaffold(
+            key: _scaffoldKey,
+            appBar: AppBar(
+              automaticallyImplyLeading: false,
+              leadingWidth: widget.showBack ? 96 : 56, // 👈 add this
+              leading: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (widget.showBack)
+                  IconButton(
+                    icon: const Icon(Icons.arrow_back),
+                    tooltip: 'Go back',
+                    onPressed: () => _goBack(context),
+                  ),
+                    IconButton(
+                      icon: const Icon(Icons.menu),
+                      tooltip: 'Open menu',
+                      onPressed: () => _scaffoldKey.currentState?.openDrawer(),
+                  ),
+                ],
+              ),
+              title: Text(widget.title),
+              actions: widget.actions,
+            ),
+            drawer: Drawer(
+              child: ListView(
+                padding: EdgeInsets.zero,
+                children: [
+                  Container(
+                    height: 72, // thinner than DrawerHeader's default ~160
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    alignment: Alignment.centerLeft,
+                    decoration: const BoxDecoration(color: AppColors.navy), // same blue as the dashboard
+                    child: const Text(
+                      'Menu',
+                      style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                  ...navItems.map((item) {
+                    final isSelected = item.route == currentRoute;
+                    return ListTile(
+                      leading: Icon(isSelected ? item.selectedIcon : item.icon),
+                      title: Text(item.label),
+                      selected: isSelected,
+                      onTap: () => _navigateTo(item.route),
+                    );
+                  }),
+                ],
+              ),
+            ),
+            body: SafeArea(child: widget.body),
+          );
+        }
+
+        return Scaffold(
+          appBar: AppBar(
+            automaticallyImplyLeading: false,
+            leading: widget.showBack
+                ? IconButton(
+                    icon: const Icon(Icons.arrow_back),
+                    tooltip: 'Go back',
+                    onPressed: () => _goBack(context),
+                  )
+                : null,
+            title: Text(widget.title),
+            actions: widget.actions,
+          ),
+          body: SafeArea(child: widget.body),
+          bottomNavigationBar: widget.bottomNavigationBar,
+        );
+      },
+    );
+  }
+}
+
+class _NavItem {
+  const _NavItem({
+    required this.icon,
+    required this.selectedIcon,
+    required this.label,
+    required this.route,
+  });
+
+  final IconData icon;
+  final IconData selectedIcon;
+  final String label;
+  final String route;
+}
+
+
+/// Shared bottom navigation for the three main modules. Previously each
+/// screen (Marketplace, Home, Profile) built its own NavigationBar with
+/// slightly different destinations/ordering; this is the single source of
+/// truth so the bottom bar — and by extension the whole shell — looks and
+/// behaves the same everywhere.
+class AppBottomNav extends ConsumerWidget {
+  const AppBottomNav({super.key, required this.currentIndex});
+
+
+  final int currentIndex;
+
+
+  static const _destinations = [
+    (
+      icon: Icons.grid_view_outlined,
+      selectedIcon: Icons.grid_view,
+      label: 'Console',
+      route: '/home',
+    ),
+    (
+      icon: Icons.storefront_outlined,
+      selectedIcon: Icons.storefront,
+      label: 'Market',
+      route: '/marketplace',
+    ),
+    (
+      icon: Icons.person_outline,
+      selectedIcon: Icons.person,
+      label: 'Profile',
+      route: '/resource-profile',
+    ),
+  ];
+
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return NavigationBar(
+      selectedIndex: currentIndex,
+      onDestinationSelected: (index) {
+        if (index == currentIndex) return;
+        context.go(_destinations[index].route);
+      },
+      destinations: _destinations
+          .map(
+            (d) => NavigationDestination(
+              icon: Icon(d.icon),
+              selectedIcon: Icon(d.selectedIcon),
+              label: d.label,
+            ),
+          )
+          .toList(),
     );
   }
 }

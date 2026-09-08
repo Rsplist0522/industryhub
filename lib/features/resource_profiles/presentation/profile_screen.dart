@@ -4,7 +4,6 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 
 import '../../../app/theme.dart';
 import '../../../core/app_state.dart';
@@ -70,22 +69,17 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     final state = ref.watch(appStateProvider);
     final profile = state.profile;
     final ownListings = state.listings
-        .where((item) => item.owner == profile.businessName)
+        .where((item) => item.ownerId == state.userId)
         .toList();
     final hasIdentity =
         profile.businessName.trim().isNotEmpty &&
         profile.sector.trim().isNotEmpty;
     final hasListings = ownListings.isNotEmpty;
 
-    return Scaffold(
-      appBar: AppBar(
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          tooltip: 'Go back',
-          onPressed: _goBack,
-        ),
-        title: const Text('My Profile'),
-      ),
+    return AppShell(
+      title: 'My Profile',
+      showBack: true,
+      bottomNavigationBar: const AppBottomNav(currentIndex: 2),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(20, 20, 20, 30),
         children: [
@@ -119,13 +113,15 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       const SizedBox(width: 10),
                       Expanded(
                         child: Text(
-                          profile.businessName,
+                          profile.businessName.trim().isEmpty
+                              ? 'Business profile'
+                              : profile.businessName,
                           style: Theme.of(context).textTheme.titleLarge,
                         ),
                       ),
-                      const StatusChip(
-                        label: 'PROFILE READY',
-                        color: AppColors.green,
+                      StatusChip(
+                        label: hasIdentity ? 'PROFILE READY' : 'PROFILE INCOMPLETE',
+                        color: hasIdentity ? AppColors.green : AppColors.rust,
                       ),
                     ],
                   ),
@@ -162,9 +158,11 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                             '${profile.msicCode} · ${profile.msicDescription ?? profile.sector}',
                       ),
                     _ProfileLine(label: 'Account role', value: profile.role),
-                    const _ProfileLine(
+                    _ProfileLine(
                       label: 'Review status',
-                      value: 'Ready for business review',
+                      value: hasIdentity
+                          ? 'Ready for business review'
+                          : 'Complete business name and industry sector',
                     ),
                     const SizedBox(height: 8),
                     OutlinedButton.icon(
@@ -223,9 +221,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             label: 'Industry sector',
             complete: profile.sector.trim().isNotEmpty,
           ),
-          const _ChecklistRow(
+          _ChecklistRow(
             label: 'Profile ready for review',
-            complete: true,
+            complete: hasIdentity,
           ),
           _ChecklistRow(
             label: 'First marketplace listing',
@@ -243,14 +241,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         ],
       ),
     );
-  }
-
-  void _goBack() {
-    if (context.canPop()) {
-      context.pop();
-    } else {
-      context.go('/home');
-    }
   }
 
   void _startEditing() => setState(() => _editing = true);
@@ -333,6 +323,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             sector: sector,
             msicCode: selectedSector?.code,
             msicDescription: selectedSector?.name,
+            clearMsic: selectedSector == null && sector != ref.read(appStateProvider).profile.sector,
           );
       if (!mounted) return;
       setState(() => _editing = false);
@@ -356,6 +347,20 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   }
 
   Future<void> _showAddListing(BuildContext context) async {
+    final profileReady = ref.read(appStateProvider).profile.hasRequiredProfileIdentity;
+    if (!profileReady) {
+      _startEditing();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Complete your business name and industry sector before publishing a listing.',
+          ),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
     final material = TextEditingController();
     final quantity = TextEditingController();
     final location = TextEditingController();
@@ -762,7 +767,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       builder: (dialogContext) => AlertDialog(
         title: const Text('Remove this listing?'),
         content: Text(
-          '${listing.material} will be removed from your Supabase workspace and no longer appear in ReSource Marketplace.',
+          '${listing.material} will be removed and no longer appear in ReSource Marketplace.',
         ),
         actions: [
           TextButton(
@@ -783,7 +788,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Listing removed from your Supabase workspace.'),
+          content: Text('Listing removed from ReSource Marketplace.'),
         ),
       );
     } catch (_) {
@@ -949,6 +954,8 @@ class _ProfileEditor extends StatelessWidget {
               initialValue: sectors.any((item) => item.name == sector.text)
                   ? sector.text
                   : null,
+              isExpanded: true,
+              menuMaxHeight: 280,
               decoration: InputDecoration(
                 labelText: 'Industry sector',
                 helperText: 'Official DOSM MSIC sector catalogue',
@@ -962,7 +969,10 @@ class _ProfileEditor extends StatelessWidget {
                   .map(
                     (item) => DropdownMenuItem(
                       value: item.name,
-                      child: Text(item.name),
+                      child: Text(
+                        item.name,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
                   )
                   .toList(),
@@ -1104,7 +1114,7 @@ class _ListingRow extends StatelessWidget {
           style: const TextStyle(fontWeight: FontWeight.w700),
         ),
         subtitle: Text(
-          '${listing.quantity.toStringAsFixed(0)} ${listing.unit} · ${listing.location}\n${isSupply ? 'Supply listing' : 'Demand listing'}${listing.askingPricePerKg == null ? '' : ' · RM ${listing.askingPricePerKg!.toStringAsFixed(2)}/kg'}',
+          '${listing.quantityLabel} ${listing.unit} · ${listing.location}\n${isSupply ? 'Supply listing' : 'Demand listing'}${listing.askingPricePerKg == null ? '' : ' · RM ${listing.askingPricePerKg!.toStringAsFixed(2)}/kg'}',
         ),
         isThreeLine: true,
         trailing: PopupMenuButton<String>(
@@ -1238,3 +1248,4 @@ class _ProfileAiAdvisor extends StatelessWidget {
     );
   }
 }
+
