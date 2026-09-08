@@ -3,6 +3,7 @@
 -- The migration is safe to run more than once.
 
 create extension if not exists pgcrypto;
+
 create or replace function public.set_updated_at()
 returns trigger
 language plpgsql
@@ -12,6 +13,7 @@ begin
   return new;
 end;
 $$;
+
 create table if not exists public.profiles (
   user_id uuid primary key references auth.users(id) on delete cascade,
   business_name text not null,
@@ -23,6 +25,7 @@ create table if not exists public.profiles (
   created_at timestamptz not null default timezone('utc', now()),
   updated_at timestamptz not null default timezone('utc', now())
 );
+
 create table if not exists public.listings (
   id uuid primary key default gen_random_uuid(),
   type text not null check (type in ('supply', 'demand')),
@@ -38,6 +41,7 @@ create table if not exists public.listings (
   created_at timestamptz not null default timezone('utc', now()),
   updated_at timestamptz not null default timezone('utc', now())
 );
+
 create table if not exists public.saved_matches (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
@@ -49,6 +53,7 @@ create table if not exists public.saved_matches (
   created_at timestamptz not null default timezone('utc', now()),
   unique (user_id, programme_id)
 );
+
 create table if not exists public.fair_price_sessions (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
@@ -64,6 +69,7 @@ create table if not exists public.fair_price_sessions (
   has_live_evidence boolean not null default false,
   created_at timestamptz not null default timezone('utc', now())
 );
+
 create table if not exists public.deal_requests (
   id uuid primary key default gen_random_uuid(),
   listing_id uuid not null references public.listings(id) on delete cascade,
@@ -78,6 +84,7 @@ create table if not exists public.deal_requests (
   created_at timestamptz not null default timezone('utc', now()),
   updated_at timestamptz not null default timezone('utc', now())
 );
+
 create table if not exists public.training_programmes (
   id text primary key,
   name text not null,
@@ -93,6 +100,7 @@ create table if not exists public.training_programmes (
   created_at timestamptz not null default timezone('utc', now()),
   updated_at timestamptz not null default timezone('utc', now())
 );
+
 create table if not exists public.msic_codes (
   item_code text primary key,
   digits integer not null,
@@ -106,6 +114,7 @@ create table if not exists public.msic_codes (
   source_url text not null default 'https://data.gov.my/data-catalogue/msic',
   created_at timestamptz not null default timezone('utc', now())
 );
+
 create table if not exists public.data_sources (
   id text primary key,
   module_key text not null check (module_key in ('skill_match', 'fair_price', 'resource_profile', 'marketplace')),
@@ -118,6 +127,7 @@ create table if not exists public.data_sources (
   last_verified_at date,
   created_at timestamptz not null default timezone('utc', now())
 );
+
 create table if not exists public.commodity_price_observations (
   id uuid primary key default gen_random_uuid(),
   source_name text not null,
@@ -131,6 +141,7 @@ create table if not exists public.commodity_price_observations (
   created_at timestamptz not null default timezone('utc', now()),
   unique (source_name, series_name, observed_on)
 );
+
 create table if not exists public.price_index_observations (
   id uuid primary key default gen_random_uuid(),
   source_name text not null,
@@ -143,6 +154,7 @@ create table if not exists public.price_index_observations (
   created_at timestamptz not null default timezone('utc', now()),
   unique (dataset_id, series, observed_on)
 );
+
 create table if not exists public.industry_context_observations (
   id uuid primary key default gen_random_uuid(),
   source_name text not null,
@@ -155,6 +167,7 @@ create table if not exists public.industry_context_observations (
   created_at timestamptz not null default timezone('utc', now()),
   unique (state, sector, series, observed_on)
 );
+
 create table if not exists public.workforce_skill_signals (
   id uuid primary key default gen_random_uuid(),
   source_name text not null,
@@ -168,19 +181,23 @@ create table if not exists public.workforce_skill_signals (
   created_at timestamptz not null default timezone('utc', now()),
   unique (dataset_id, variable, age_group, observed_on)
 );
+
 -- Keep an existing compatible schema usable when this migration is added later.
 alter table public.profiles add column if not exists msic_code text;
 alter table public.profiles add column if not exists msic_description text;
 alter table public.profiles add column if not exists verified boolean not null default false;
 alter table public.profiles add column if not exists created_at timestamptz not null default timezone('utc', now());
 alter table public.profiles add column if not exists updated_at timestamptz not null default timezone('utc', now());
+
 alter table public.listings add column if not exists asking_price_per_kg numeric(18, 4);
 alter table public.listings add column if not exists verified boolean not null default false;
 alter table public.listings add column if not exists created_at timestamptz not null default timezone('utc', now());
 alter table public.listings add column if not exists updated_at timestamptz not null default timezone('utc', now());
+
 alter table public.deal_requests add column if not exists status text not null default 'REQUEST SENT';
 alter table public.deal_requests add column if not exists created_at timestamptz not null default timezone('utc', now());
 alter table public.deal_requests add column if not exists updated_at timestamptz not null default timezone('utc', now());
+
 alter table public.training_programmes add column if not exists name text not null default 'Unnamed programme';
 alter table public.training_programmes add column if not exists provider text not null default 'Unspecified provider';
 alter table public.training_programmes add column if not exists skills text[] not null default '{}';
@@ -193,6 +210,7 @@ alter table public.training_programmes add column if not exists summary text not
 alter table public.training_programmes add column if not exists is_active boolean not null default true;
 alter table public.training_programmes add column if not exists created_at timestamptz not null default timezone('utc', now());
 alter table public.training_programmes add column if not exists updated_at timestamptz not null default timezone('utc', now());
+
 create index if not exists listings_owner_id_idx on public.listings(owner_id);
 create index if not exists saved_matches_user_id_idx on public.saved_matches(user_id, created_at desc);
 create index if not exists fair_price_sessions_user_id_idx on public.fair_price_sessions(user_id, created_at desc);
@@ -203,18 +221,23 @@ create index if not exists msic_codes_description_idx on public.msic_codes using
 create index if not exists commodity_price_series_idx on public.commodity_price_observations(series_name, observed_on desc);
 create index if not exists industry_context_state_idx on public.industry_context_observations(state, observed_on desc);
 create index if not exists workforce_skill_signals_latest_idx on public.workforce_skill_signals(observed_on desc, variable);
-drop trigger if exists profiles_set_updated_at on public.profiles;
+
+ drop trigger if exists profiles_set_updated_at on public.profiles;
 create trigger profiles_set_updated_at before update on public.profiles
 for each row execute function public.set_updated_at();
-drop trigger if exists listings_set_updated_at on public.listings;
+
+ drop trigger if exists listings_set_updated_at on public.listings;
 create trigger listings_set_updated_at before update on public.listings
 for each row execute function public.set_updated_at();
-drop trigger if exists deal_requests_set_updated_at on public.deal_requests;
+
+ drop trigger if exists deal_requests_set_updated_at on public.deal_requests;
 create trigger deal_requests_set_updated_at before update on public.deal_requests
 for each row execute function public.set_updated_at();
-drop trigger if exists training_programmes_set_updated_at on public.training_programmes;
+
+ drop trigger if exists training_programmes_set_updated_at on public.training_programmes;
 create trigger training_programmes_set_updated_at before update on public.training_programmes
 for each row execute function public.set_updated_at();
+
 alter table public.profiles enable row level security;
 alter table public.saved_matches enable row level security;
 alter table public.fair_price_sessions enable row level security;
@@ -227,24 +250,28 @@ alter table public.commodity_price_observations enable row level security;
 alter table public.price_index_observations enable row level security;
 alter table public.industry_context_observations enable row level security;
 alter table public.workforce_skill_signals enable row level security;
+
 drop policy if exists saved_matches_select_own on public.saved_matches;
 create policy saved_matches_select_own on public.saved_matches for select to authenticated using (auth.uid() = user_id);
 drop policy if exists saved_matches_insert_own on public.saved_matches;
 create policy saved_matches_insert_own on public.saved_matches for insert to authenticated with check (auth.uid() = user_id);
 drop policy if exists saved_matches_delete_own on public.saved_matches;
 create policy saved_matches_delete_own on public.saved_matches for delete to authenticated using (auth.uid() = user_id);
+
 drop policy if exists fair_price_sessions_select_own on public.fair_price_sessions;
 create policy fair_price_sessions_select_own on public.fair_price_sessions for select to authenticated using (auth.uid() = user_id);
 drop policy if exists fair_price_sessions_insert_own on public.fair_price_sessions;
 create policy fair_price_sessions_insert_own on public.fair_price_sessions for insert to authenticated with check (auth.uid() = user_id);
 drop policy if exists fair_price_sessions_delete_own on public.fair_price_sessions;
 create policy fair_price_sessions_delete_own on public.fair_price_sessions for delete to authenticated using (auth.uid() = user_id);
+
 drop policy if exists profiles_select_own on public.profiles;
 create policy profiles_select_own on public.profiles for select to authenticated using (auth.uid() = user_id);
 drop policy if exists profiles_insert_own on public.profiles;
 create policy profiles_insert_own on public.profiles for insert to authenticated with check (auth.uid() = user_id);
 drop policy if exists profiles_update_own on public.profiles;
 create policy profiles_update_own on public.profiles for update to authenticated using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
 drop policy if exists listings_select_authenticated on public.listings;
 create policy listings_select_authenticated on public.listings for select to authenticated using (true);
 drop policy if exists listings_insert_own on public.listings;
@@ -253,10 +280,12 @@ drop policy if exists listings_update_own on public.listings;
 create policy listings_update_own on public.listings for update to authenticated using (auth.uid() = owner_id) with check (auth.uid() = owner_id);
 drop policy if exists listings_delete_own on public.listings;
 create policy listings_delete_own on public.listings for delete to authenticated using (auth.uid() = owner_id);
+
 drop policy if exists deal_requests_select_own on public.deal_requests;
 create policy deal_requests_select_own on public.deal_requests for select to authenticated using (auth.uid() = requester_id);
 drop policy if exists deal_requests_insert_own on public.deal_requests;
 create policy deal_requests_insert_own on public.deal_requests for insert to authenticated with check (auth.uid() = requester_id);
+
 drop policy if exists training_programmes_select_active on public.training_programmes;
 create policy training_programmes_select_active on public.training_programmes for select to authenticated using (is_active = true);
 drop policy if exists msic_codes_select_authenticated on public.msic_codes;

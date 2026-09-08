@@ -6,6 +6,8 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../domain/skill_models.dart';
+
 class TrainingProgramme {
   const TrainingProgramme({
     required this.id,
@@ -18,6 +20,9 @@ class TrainingProgramme {
     required this.sourceUrl,
     required this.credential,
     required this.summary,
+    this.industry,
+    this.targetRoles = const [],
+    this.prerequisites,
   });
 
   final String id;
@@ -30,6 +35,9 @@ class TrainingProgramme {
   final String sourceUrl;
   final String credential;
   final String summary;
+  final String? industry;
+  final List<String> targetRoles;
+  final List<String>? prerequisites;
 
   factory TrainingProgramme.fromSupabase(Map<String, dynamic> data) {
     final rawSkills = data['skills'];
@@ -57,9 +65,42 @@ class TrainingProgramme {
       credential: data['credential'] as String? ?? '',
       summary:
           data['summary'] as String? ?? data['description'] as String? ?? '',
+      industry: _optionalText(data['industry']),
+      targetRoles: _readStringList(data['target_roles']),
+      prerequisites: data.containsKey('prerequisites')
+          ? _readStringList(data['prerequisites'])
+          : null,
     );
   }
+
+  ProgrammeCandidate toCandidate() => ProgrammeCandidate(
+    id: id,
+    name: name,
+    provider: provider,
+    skills: skills,
+    level: level.trim().isEmpty || level == 'Unspecified level' ? null : level,
+    durationDays: durationDays > 0 ? durationDays : null,
+    credential: credential.trim().isEmpty ? null : credential,
+    summary: summary.trim().isEmpty ? null : summary,
+    industry: industry,
+    targetRoles: targetRoles,
+    prerequisites: prerequisites,
+    sourceName: sourceName,
+    sourceUrl: sourceUrl,
+  );
 }
+
+String? _optionalText(dynamic value) {
+  final text = value is String ? value.trim() : '';
+  return text.isEmpty ? null : text;
+}
+
+List<String> _readStringList(dynamic value) => value is List
+    ? value
+          .map((item) => '$item'.trim())
+          .where((item) => item.isNotEmpty)
+          .toList()
+    : const [];
 
 class WorkforceSkillSignal {
   const WorkforceSkillSignal({
