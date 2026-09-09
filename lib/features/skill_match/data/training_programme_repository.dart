@@ -23,6 +23,7 @@ class TrainingProgramme {
     this.industry,
     this.targetRoles = const [],
     this.prerequisites,
+    this.metadataNote = '',
   });
 
   final String id;
@@ -38,6 +39,7 @@ class TrainingProgramme {
   final String? industry;
   final List<String> targetRoles;
   final List<String>? prerequisites;
+  final String metadataNote;
 
   factory TrainingProgramme.fromSupabase(Map<String, dynamic> data) {
     final rawSkills = data['skills'];
@@ -70,6 +72,7 @@ class TrainingProgramme {
       prerequisites: data.containsKey('prerequisites')
           ? _readStringList(data['prerequisites'])
           : null,
+      metadataNote: _optionalText(data['metadata_note']) ?? '',
     );
   }
 
@@ -85,6 +88,7 @@ class TrainingProgramme {
     industry: industry,
     targetRoles: targetRoles,
     prerequisites: prerequisites,
+    metadataNote: metadataNote,
     sourceName: sourceName,
     sourceUrl: sourceUrl,
   );
@@ -102,43 +106,6 @@ List<String> _readStringList(dynamic value) => value is List
           .toList()
     : const [];
 
-class WorkforceSkillSignal {
-  const WorkforceSkillSignal({
-    required this.variable,
-    required this.ageGroup,
-    required this.observedOn,
-    required this.value,
-    required this.unit,
-    required this.sourceName,
-    required this.sourceUrl,
-  });
-
-  final String variable;
-  final String ageGroup;
-  final DateTime observedOn;
-  final double value;
-  final String unit;
-  final String sourceName;
-  final String sourceUrl;
-
-  factory WorkforceSkillSignal.fromSupabase(Map<String, dynamic> data) =>
-      WorkforceSkillSignal(
-        variable: data['variable'] as String? ?? 'Skills signal',
-        ageGroup: data['age_group'] as String? ?? 'Overall',
-        observedOn:
-            DateTime.tryParse(data['observed_on'] as String? ?? '') ??
-            DateTime.now(),
-        value: (data['signal_value'] as num?)?.toDouble() ?? 0,
-        unit: data['unit'] as String? ?? 'unknown unit',
-        sourceName:
-            data['source_name'] as String? ??
-            'Department of Statistics Malaysia',
-        sourceUrl:
-            data['source_url'] as String? ??
-            'https://data.gov.my/data-catalogue/lfs_qtr_sru_age',
-      );
-}
-
 class TrainingProgrammeRepository {
   TrainingProgrammeRepository({SupabaseClient? supabase, http.Client? client})
     : _supabase = supabase ?? Supabase.instance.client,
@@ -146,6 +113,7 @@ class TrainingProgrammeRepository {
 
   final SupabaseClient _supabase;
   final http.Client _client;
+  Future<List<WorkforceSkillSignal>>? _workforceSignals;
 
   Future<List<TrainingProgramme>> fetchActiveProgrammes() async {
     final rows = await _supabase
@@ -161,22 +129,28 @@ class TrainingProgrammeRepository {
         .toList();
   }
 
-  Future<WorkforceSkillSignal?> fetchLatestWorkforceSignal() async {
+  Future<List<WorkforceSkillSignal>> fetchWorkforceSkillSignals() =>
+      _workforceSignals ??= _loadWorkforceSkillSignals();
+
+  Future<List<WorkforceSkillSignal>> _loadWorkforceSkillSignals() async {
     try {
       final rows = await _supabase
           .from('workforce_skill_signals')
           .select()
           .eq('dataset_id', 'lfs_qtr_sru_age')
-          .eq('age_group', 'Overall')
-          .order('observed_on', ascending: false)
-          .limit(1);
+          .order('observed_on');
       if (rows.isNotEmpty) {
-        return WorkforceSkillSignal.fromSupabase(
-          Map<String, dynamic>.from(rows.first),
-        );
+        return rows
+            .map(
+              (row) => WorkforceSkillSignal.fromSupabase(
+                Map<String, dynamic>.from(row),
+              ),
+            )
+            .toList(growable: false);
       }
     } catch (_) {
-      // Fall back to the public DOSM API below.
+      // The public API below keeps government evidence available if Supabase
+      // has not been populated yet.
     }
 
     final response = await _client
@@ -198,26 +172,26 @@ class TrainingProgrammeRepository {
       );
     }
 
-    WorkforceSkillSignal? latest;
+    final signals = <WorkforceSkillSignal>[];
     for (final raw in decoded.whereType<Map>()) {
       final data = Map<String, dynamic>.from(raw);
-      final age = '${data['age'] ?? ''}'.trim().toLowerCase();
+      final age = '${data['age'] ?? ''}'.trim();
       final variable = '${data['variable'] ?? ''}'.trim();
       final observedOn = DateTime.tryParse('${data['date'] ?? ''}');
       final value = data['sru'] is num
           ? (data['sru'] as num).toDouble()
           : double.tryParse('${data['sru'] ?? ''}');
-      if (age != 'overall' ||
+      if (age.isEmpty ||
           variable.isEmpty ||
           observedOn == null ||
           value == null ||
           !value.isFinite) {
         continue;
       }
-      if (latest == null || observedOn.isAfter(latest.observedOn)) {
-        latest = WorkforceSkillSignal(
+      signals.add(
+        WorkforceSkillSignal(
           variable: variable,
-          ageGroup: 'Overall',
+          ageGroup: age,
           observedOn: observedOn,
           value: value,
           unit: variable.toLowerCase().contains('rate')
@@ -225,9 +199,9 @@ class TrainingProgrammeRepository {
               : "persons ('000)",
           sourceName: 'Department of Statistics Malaysia',
           sourceUrl: 'https://data.gov.my/data-catalogue/lfs_qtr_sru_age',
-        );
-      }
+        ),
+      );
     }
-    return latest;
+    return List.unmodifiable(signals);
   }
 }

@@ -15,6 +15,17 @@ extension CompetencyLevelDetails on CompetencyLevel {
     CompetencyLevel.advanced => 85,
   };
 
+  String get evidenceAnchor => switch (this) {
+    CompetencyLevel.beginner =>
+      'I need step-by-step guidance and cannot yet complete this independently.',
+    CompetencyLevel.basic =>
+      'I understand the basics and can complete simple tasks with some support.',
+    CompetencyLevel.intermediate =>
+      'I can complete normal work independently and troubleshoot familiar issues.',
+    CompetencyLevel.advanced =>
+      'I can handle complex work, explain decisions, and guide other people.',
+  };
+
   static CompetencyLevel fromScore(num score) {
     if (score >= 75) return CompetencyLevel.advanced;
     if (score >= 53) return CompetencyLevel.intermediate;
@@ -70,6 +81,11 @@ class RoleCompetencyProfile {
     required this.title,
     required this.industry,
     required this.competencies,
+    this.summary = '',
+    this.aliases = const [],
+    this.frameworkNote = '',
+    this.frameworkSourceName = '',
+    this.frameworkSourceUrl = '',
     this.isCustom = false,
   });
 
@@ -77,12 +93,22 @@ class RoleCompetencyProfile {
   final String title;
   final String industry;
   final List<SkillCompetency> competencies;
+  final String summary;
+  final List<String> aliases;
+  final String frameworkNote;
+  final String frameworkSourceName;
+  final String frameworkSourceUrl;
   final bool isCustom;
 
   Map<String, dynamic> toJson() => {
     'id': id,
     'title': title,
     'industry': industry,
+    'summary': summary,
+    'aliases': aliases,
+    'framework_note': frameworkNote,
+    'framework_source_name': frameworkSourceName,
+    'framework_source_url': frameworkSourceUrl,
     'is_custom': isCustom,
     'competencies': competencies.map((item) => item.toJson()).toList(),
   };
@@ -92,6 +118,11 @@ class RoleCompetencyProfile {
         id: '${json['id'] ?? ''}',
         title: '${json['title'] ?? 'Target role'}',
         industry: '${json['industry'] ?? 'General'}',
+        summary: '${json['summary'] ?? ''}',
+        aliases: _stringList(json['aliases']),
+        frameworkNote: '${json['framework_note'] ?? ''}',
+        frameworkSourceName: '${json['framework_source_name'] ?? ''}',
+        frameworkSourceUrl: '${json['framework_source_url'] ?? ''}',
         isCustom: json['is_custom'] == true,
         competencies: (json['competencies'] as List? ?? const [])
             .whereType<Map>()
@@ -186,6 +217,7 @@ class ProgrammeCandidate {
     this.industry,
     this.targetRoles = const [],
     this.prerequisites,
+    this.metadataNote = '',
     this.sourceName = '',
     this.sourceUrl = '',
   });
@@ -201,6 +233,7 @@ class ProgrammeCandidate {
   final String? industry;
   final List<String> targetRoles;
   final List<String>? prerequisites;
+  final String metadataNote;
   final String sourceName;
   final String sourceUrl;
 }
@@ -224,6 +257,7 @@ class RankedProgramme {
   const RankedProgramme({
     required this.programme,
     required this.matchScore,
+    required this.evidenceCoverage,
     required this.components,
     required this.coveredSkillIds,
     required this.reasons,
@@ -231,6 +265,7 @@ class RankedProgramme {
 
   final ProgrammeCandidate programme;
   final double matchScore;
+  final double evidenceCoverage;
   final List<ProgrammeScoreComponent> components;
   final List<String> coveredSkillIds;
   final List<String> reasons;
@@ -332,6 +367,79 @@ class LearningRoadmap {
         stages: stages ?? this.stages,
         createdAt: createdAt,
       );
+}
+
+class WorkforceSkillSignal {
+  const WorkforceSkillSignal({
+    required this.variable,
+    required this.ageGroup,
+    required this.observedOn,
+    required this.value,
+    required this.unit,
+    required this.sourceName,
+    required this.sourceUrl,
+  });
+
+  final String variable;
+  final String ageGroup;
+  final DateTime observedOn;
+  final double value;
+  final String unit;
+  final String sourceName;
+  final String sourceUrl;
+
+  factory WorkforceSkillSignal.fromSupabase(
+    Map<String, dynamic> data,
+  ) => WorkforceSkillSignal(
+    variable: '${data['variable'] ?? 'Skills signal'}',
+    ageGroup: '${data['age_group'] ?? 'Overall'}',
+    observedOn:
+        DateTime.tryParse('${data['observed_on'] ?? ''}') ?? DateTime(1970),
+    value: (data['signal_value'] as num?)?.toDouble() ?? 0,
+    unit: '${data['unit'] ?? 'unknown unit'}',
+    sourceName: '${data['source_name'] ?? 'Department of Statistics Malaysia'}',
+    sourceUrl:
+        '${data['source_url'] ?? 'https://data.gov.my/data-catalogue/lfs_qtr_sru_age'}',
+  );
+}
+
+class MalaysiaWorkforceInsight {
+  const MalaysiaWorkforceInsight({
+    required this.ageGroup,
+    required this.observedOn,
+    required this.rate,
+    required this.sourceName,
+    required this.sourceUrl,
+    this.previousRate,
+    this.peopleThousands,
+  });
+
+  final String ageGroup;
+  final DateTime observedOn;
+  final double rate;
+  final double? previousRate;
+  final double? peopleThousands;
+  final String sourceName;
+  final String sourceUrl;
+
+  double? get rateChange => previousRate == null ? null : rate - previousRate!;
+
+  String get periodLabel {
+    final quarter = ((observedOn.month - 1) ~/ 3) + 1;
+    return 'Q$quarter ${observedOn.year}';
+  }
+}
+
+class SkillCoachMessage {
+  const SkillCoachMessage({
+    required this.text,
+    required this.isUser,
+    this.actionSteps = const [],
+  });
+
+  final String text;
+  final bool isUser;
+  final List<String> actionSteps;
 }
 
 List<String> _stringList(dynamic value) => value is List

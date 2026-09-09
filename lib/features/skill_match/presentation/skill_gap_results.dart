@@ -84,6 +84,25 @@ class SkillGapResults extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 12),
+        Card(
+          child: ExpansionTile(
+            leading: const Icon(Icons.calculate_outlined),
+            title: const Text('How this score is calculated'),
+            subtitle: const Text('Transparent and deterministic - not AI'),
+            childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
+            children: const [
+              Text(
+                'For each competency, SkillMatch divides your fixed level score by the target, caps it at 100%, and multiplies it by the competency weight. The weighted results are added and converted to a 0-100 readiness score. Priority gaps use gap size x weight.',
+                style: TextStyle(
+                  color: AppColors.slate,
+                  fontSize: 12,
+                  height: 1.4,
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
         ...analysis.results.map(
           (gap) => _GapRow(
             gap: gap,

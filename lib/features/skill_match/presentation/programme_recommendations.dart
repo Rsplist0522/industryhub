@@ -12,12 +12,14 @@ class ProgrammeRecommendations extends StatelessWidget {
     required this.catalogueStatus,
     required this.savedProgrammeIds,
     required this.onSave,
+    required this.fallbackQuery,
   });
 
   final List<RankedProgramme> programmes;
   final String catalogueStatus;
   final Set<String> savedProgrammeIds;
   final ValueChanged<RankedProgramme> onSave;
+  final String fallbackQuery;
 
   @override
   Widget build(BuildContext context) {
@@ -31,15 +33,7 @@ class ProgrammeRecommendations extends StatelessWidget {
           style: const TextStyle(color: AppColors.slate, fontSize: 12),
         ),
         const SizedBox(height: 10),
-        if (programmes.isEmpty)
-          const Card(
-            child: Padding(
-              padding: EdgeInsets.all(16),
-              child: Text(
-                'No programme currently covers a measured priority gap. Your diagnostic and roadmap remain available.',
-              ),
-            ),
-          ),
+        if (programmes.isEmpty) _CatalogueFallbackCard(query: fallbackQuery),
         ...programmes.map(
           (ranked) => _RecommendationCard(
             ranked: ranked,
@@ -130,6 +124,21 @@ class _RecommendationCard extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 13),
+            Row(
+              children: [
+                const Icon(
+                  Icons.fact_check_outlined,
+                  size: 16,
+                  color: AppColors.slate,
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  '${ranked.evidenceCoverage.round()}% catalogue evidence available',
+                  style: const TextStyle(color: AppColors.slate, fontSize: 11),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
             ...ranked.components.map(
               (component) => Padding(
                 padding: const EdgeInsets.only(bottom: 6),
@@ -198,9 +207,75 @@ class _RecommendationCard extends StatelessWidget {
                   : programme.sourceName,
               style: const TextStyle(color: AppColors.slate, fontSize: 10),
             ),
+            if (programme.metadataNote.isNotEmpty) ...[
+              const SizedBox(height: 3),
+              Text(
+                programme.metadataNote,
+                style: const TextStyle(color: AppColors.slate, fontSize: 10),
+              ),
+            ],
           ],
         ),
       ),
     );
   }
+}
+
+class _CatalogueFallbackCard extends StatelessWidget {
+  const _CatalogueFallbackCard({required this.query});
+
+  final String query;
+
+  Future<void> _openUri(BuildContext context, Uri uri) async {
+    if (!await launchUrl(uri, mode: LaunchMode.externalApplication) &&
+        context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('The live course search could not be opened.'),
+        ),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => Card(
+    child: Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'No verified catalogue programme currently covers your measured gaps. SkillMatch will not invent a recommendation.',
+          ),
+          const SizedBox(height: 9),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              FilledButton.icon(
+                onPressed: () => _openUri(
+                  context,
+                  Uri.parse('https://upskillmalaysia.gov.my/'),
+                ),
+                icon: const Icon(Icons.account_balance_outlined, size: 17),
+                label: const Text('Open Upskill Malaysia'),
+              ),
+              OutlinedButton.icon(
+                onPressed: query.trim().isEmpty
+                    ? null
+                    : () => _openUri(
+                        context,
+                        Uri.parse(
+                          'https://www.coursera.org/search?query=${Uri.encodeQueryComponent(query)}',
+                        ),
+                      ),
+                icon: const Icon(Icons.travel_explore, size: 17),
+                label: const Text('Search live courses'),
+              ),
+            ],
+          ),
+        ],
+      ),
+    ),
+  );
 }

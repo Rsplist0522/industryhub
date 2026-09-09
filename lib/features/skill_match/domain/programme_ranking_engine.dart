@@ -21,8 +21,12 @@ class ProgrammeRankingEngine {
             .toList()
           ..sort((a, b) {
             final scoreOrder = b.matchScore.compareTo(a.matchScore);
-            return scoreOrder != 0
-                ? scoreOrder
+            if (scoreOrder != 0) return scoreOrder;
+            final evidenceOrder = b.evidenceCoverage.compareTo(
+              a.evidenceCoverage,
+            );
+            return evidenceOrder != 0
+                ? evidenceOrder
                 : a.programme.name.compareTo(b.programme.name);
           });
     return ranked;
@@ -108,6 +112,7 @@ class ProgrammeRankingEngine {
     final match = availableWeight == 0
         ? 0.0
         : (weightedScore / availableWeight).clamp(0, 100).toDouble();
+    final evidenceCoverage = (availableWeight * 100).clamp(0, 100).toDouble();
 
     final reasons = <String>[
       if (covered.isNotEmpty)
@@ -126,6 +131,7 @@ class ProgrammeRankingEngine {
     return RankedProgramme(
       programme: programme,
       matchScore: match,
+      evidenceCoverage: evidenceCoverage,
       components: components,
       coveredSkillIds: covered,
       reasons: reasons,

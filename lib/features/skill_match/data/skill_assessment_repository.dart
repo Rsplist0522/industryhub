@@ -65,17 +65,17 @@ class SkillAssessmentRepository {
     final user = _requireUser();
     final rows = await _supabase
         .from('skill_assessments')
-        .select('id, role_profile, readiness_score, completed_at')
+        .select(
+          'id, role_profile, readiness_score, completed_at, '
+          'skill_assessment_scores(competency_id, current_level)',
+        )
         .eq('user_id', user.id)
         .eq('role_profile_id', roleProfileId)
         .order('completed_at');
     final assessments = <SkillAssessment>[];
     for (final raw in rows as List) {
       final row = Map<String, dynamic>.from(raw as Map);
-      final scoreRows = await _supabase
-          .from('skill_assessment_scores')
-          .select('competency_id, current_level')
-          .eq('assessment_id', '${row['id']}');
+      final scoreRows = row['skill_assessment_scores'] as List? ?? const [];
       final profile = RoleCompetencyProfile.fromJson(
         Map<String, dynamic>.from(row['role_profile'] as Map),
       );
@@ -83,7 +83,7 @@ class SkillAssessmentRepository {
         SkillAssessment(
           id: '${row['id']}',
           roleProfile: profile,
-          answers: (scoreRows as List).map((rawScore) {
+          answers: scoreRows.map((rawScore) {
             final score = Map<String, dynamic>.from(rawScore as Map);
             return SkillAssessmentAnswer(
               competencyId: '${score['competency_id']}',
@@ -159,26 +159,32 @@ class SkillAssessmentRepository {
     final user = _requireUser();
     final row = await _supabase
         .from('learning_roadmaps')
-        .select('id, assessment_id, role_profile_id, role_title, created_at')
+        .select(
+          'id, assessment_id, role_profile_id, role_title, created_at, '
+          'learning_roadmap_items(*)',
+        )
         .eq('user_id', user.id)
         .eq('role_profile_id', roleProfileId)
         .order('created_at', ascending: false)
         .limit(1)
         .maybeSingle();
     if (row == null) return null;
-    final items = await _supabase
-        .from('learning_roadmap_items')
-        .select()
-        .eq('roadmap_id', '${row['id']}')
-        .order('sequence_no');
+    final items =
+        (row['learning_roadmap_items'] as List? ?? const [])
+            .map((raw) => Map<String, dynamic>.from(raw as Map))
+            .toList()
+          ..sort(
+            (a, b) => ((a['sequence_no'] as num?) ?? 0).compareTo(
+              (b['sequence_no'] as num?) ?? 0,
+            ),
+          );
     return LearningRoadmap(
       id: '${row['id']}',
       assessmentId: '${row['assessment_id']}',
       roleProfileId: '${row['role_profile_id']}',
       roleTitle: '${row['role_title']}',
       createdAt: DateTime.tryParse('${row['created_at']}') ?? DateTime.now(),
-      stages: (items as List).map((raw) {
-        final item = Map<String, dynamic>.from(raw as Map);
+      stages: items.map((item) {
         return LearningRoadmapStage(
           id: '${item['id']}',
           sequence: (item['sequence_no'] as num?)?.toInt() ?? 0,

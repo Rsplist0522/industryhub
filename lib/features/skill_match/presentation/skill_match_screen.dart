@@ -7,14 +7,18 @@ import '../../../core/app_state.dart';
 import '../../../core/services.dart';
 import '../../../core/widgets.dart';
 import '../data/skill_assessment_repository.dart';
+import '../data/skill_coach_service.dart';
 import '../data/training_programme_repository.dart';
 import '../domain/learning_roadmap_engine.dart';
 import '../domain/programme_ranking_engine.dart';
 import '../domain/role_profile_catalogue.dart';
 import '../domain/skill_gap_engine.dart';
 import '../domain/skill_models.dart';
+import '../domain/workforce_insight_engine.dart';
 import 'learning_roadmap_widget.dart';
+import 'malaysia_workforce_insight_card.dart';
 import 'programme_recommendations.dart';
+import 'skill_coach_panel.dart';
 import 'skill_diagnostic_section.dart';
 import 'skill_gap_results.dart';
 
@@ -26,15 +30,16 @@ class SkillMatchScreen extends ConsumerStatefulWidget {
 }
 
 class _SkillMatchScreenState extends ConsumerState<SkillMatchScreen> {
-  final _goalController = TextEditingController();
-  final _customRoleController = TextEditingController();
   final _scrollController = ScrollController();
+  final _diagnosticSectionKey = GlobalKey();
+  final _roleCatalogue = RoleProfileCatalogue();
   final _programmeRepository = TrainingProgrammeRepository();
   final _assessmentRepository = SkillAssessmentRepository();
+  final _coachService = SkillCoachService();
   final _gapEngine = const SkillGapEngine();
   final _rankingEngine = const ProgrammeRankingEngine();
   final _roadmapEngine = const LearningRoadmapEngine();
-  final _aiService = const AiService();
+  final _workforceEngine = const WorkforceInsightEngine();
 
   RoleCompetencyProfile? _selectedProfile;
   final Map<String, CompetencyLevel> _answers = {};
@@ -42,17 +47,23 @@ class _SkillMatchScreenState extends ConsumerState<SkillMatchScreen> {
   List<ProgrammeCandidate> _catalogue = const [];
   List<RankedProgramme> _rankedProgrammes = const [];
   List<SkillAssessment> _assessmentHistory = const [];
+  List<RoleCompetencyProfile> _roleProfiles = const [];
+  List<WorkforceSkillSignal> _workforceSignals = const [];
+  List<SkillCoachMessage> _coachMessages = const [];
   SkillGapAnalysis? _analysis;
   LearningRoadmap? _roadmap;
-  WorkforceSkillSignal? _workforceSignal;
+  String? _selectedAgeGroup;
+  String _roleLibraryStatus = 'Loading the role profile library...';
+  String? _workforceError;
+  String? _coachError;
   String _catalogueStatus = 'Loading the live Supabase programme catalogue…';
-  String? _aiNotice;
   String? _persistenceNotice;
   String? _savingStageId;
-  bool _isInterpreting = false;
   bool _isSavingAssessment = false;
   bool _isLoadingHistory = false;
   bool _isReassessing = false;
+  bool _isLoadingWorkforce = true;
+  bool _isCoachThinking = false;
 
   @override
   void initState() {
@@ -62,18 +73,36 @@ class _SkillMatchScreenState extends ConsumerState<SkillMatchScreen> {
 
   @override
   void dispose() {
-    _goalController.dispose();
-    _customRoleController.dispose();
     _scrollController.dispose();
     super.dispose();
   }
 
   Future<void> _loadInitialData() async {
     await Future.wait([
+      _loadRoleProfiles(),
       _loadCatalogue(),
       _loadSavedMatches(),
-      _loadWorkforceSignal(),
+      _loadWorkforceSignals(),
     ]);
+  }
+
+  Future<void> _loadRoleProfiles() async {
+    try {
+      final profiles = await _roleCatalogue.load();
+      if (!mounted) return;
+      setState(() {
+        _roleProfiles = profiles;
+        _roleLibraryStatus =
+            '${profiles.length} industrial and digital role profiles loaded once from the bundled catalogue.';
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _roleProfiles = const [];
+        _roleLibraryStatus =
+            'The role profile library could not be loaded. Check the bundled role data.';
+      });
+    }
   }
 
   Future<void> _loadCatalogue() async {
@@ -113,59 +142,27 @@ class _SkillMatchScreenState extends ConsumerState<SkillMatchScreen> {
     }
   }
 
-  Future<void> _loadWorkforceSignal() async {
+  Future<void> _loadWorkforceSignals() async {
     try {
-      final signal = await _programmeRepository.fetchLatestWorkforceSignal();
-      if (mounted) setState(() => _workforceSignal = signal);
+      final signals = await _programmeRepository.fetchWorkforceSkillSignals();
+      final groups = _workforceEngine.ageGroups(signals);
+      if (!mounted) return;
+      setState(() {
+        _workforceSignals = signals;
+        _selectedAgeGroup = groups.isEmpty ? null : groups.first;
+        _isLoadingWorkforce = false;
+        _workforceError = signals.isEmpty
+            ? 'DOSM returned no usable skills-related underemployment records.'
+            : null;
+      });
     } catch (_) {
-      // This contextual signal is optional and never affects a score.
+      if (!mounted) return;
+      setState(() {
+        _isLoadingWorkforce = false;
+        _workforceError =
+            'DOSM data is temporarily unavailable. Diagnostics remain usable without it.';
+      });
     }
-  }
-
-  Future<void> _interpretCareerGoal() async {
-    final goal = _goalController.text.trim();
-    if (goal.isEmpty || _isInterpreting) return;
-    setState(() {
-      _isInterpreting = true;
-      _aiNotice = null;
-    });
-
-    var profile = RoleProfileCatalogue.infer(goal);
-    try {
-      final response = await _aiService.callAI(
-        'Interpret only the target occupation in this career goal. Return JSON with role_id and role_title. Allowed role_id values: software_engineer, data_analyst, cnc_operator, quality_inspector, production_supervisor, welding_technician. Do not calculate readiness, gaps, assessment results, programme scores, or roadmap progress.',
-        goal,
-      );
-      final roleId = response['role_id'] as String?;
-      final byId = roleId == null ? null : RoleProfileCatalogue.byId(roleId);
-      profile =
-          byId ??
-          _profileFromTitle('${response['role_title'] ?? ''}') ??
-          profile;
-      _aiNotice =
-          'AI interpreted the goal as ${profile.title}. Confirm or change the role before starting.';
-    } catch (error) {
-      _aiNotice =
-          'AI is unavailable, so the on-device role rules selected ${profile.title}. Numerical features are unaffected. ${describeAiError(error)}';
-    }
-    if (!mounted) return;
-    setState(() => _isInterpreting = false);
-    await _selectRole(profile);
-  }
-
-  RoleCompetencyProfile? _profileFromTitle(String title) {
-    final normalised = title.toLowerCase();
-    for (final profile in RoleProfileCatalogue.profiles) {
-      final words = profile.title.toLowerCase().split(' ');
-      if (words.every(normalised.contains)) return profile;
-    }
-    return null;
-  }
-
-  Future<void> _createCustomRole() async {
-    final title = _customRoleController.text.trim();
-    if (title.isEmpty) return;
-    await _selectRole(RoleProfileCatalogue.custom(title));
   }
 
   Future<void> _selectRole(RoleCompetencyProfile profile) async {
@@ -176,6 +173,8 @@ class _SkillMatchScreenState extends ConsumerState<SkillMatchScreen> {
       _rankedProgrammes = const [];
       _roadmap = null;
       _assessmentHistory = const [];
+      _coachMessages = const [];
+      _coachError = null;
       _persistenceNotice = null;
       _isReassessing = false;
       _isLoadingHistory = true;
@@ -378,15 +377,68 @@ class _SkillMatchScreenState extends ConsumerState<SkillMatchScreen> {
     }
   }
 
+  MalaysiaWorkforceInsight? get _workforceInsight {
+    final group = _selectedAgeGroup;
+    if (group == null) return null;
+    return _workforceEngine.build(signals: _workforceSignals, ageGroup: group);
+  }
+
+  void _changeAgeGroup(String value) {
+    setState(() {
+      _selectedAgeGroup = value;
+      _coachMessages = const [];
+      _coachError = null;
+    });
+  }
+
+  Future<void> _askCoach(String question) async {
+    final analysis = _analysis;
+    if (analysis == null || _isCoachThinking) return;
+    final userMessage = SkillCoachMessage(text: question, isUser: true);
+    setState(() {
+      _coachMessages = [..._coachMessages, userMessage];
+      _isCoachThinking = true;
+      _coachError = null;
+    });
+    try {
+      final reply = await _coachService.ask(
+        question: question,
+        analysis: analysis,
+        programmes: _rankedProgrammes,
+        roadmap: _roadmap,
+        workforceInsight: _workforceInsight,
+      );
+      if (!mounted) return;
+      setState(() => _coachMessages = [..._coachMessages, reply]);
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _coachError =
+            'AI coach unavailable. Your diagnostic, ranking, and roadmap still work. ${describeAiError(error)}';
+      });
+    } finally {
+      if (mounted) setState(() => _isCoachThinking = false);
+    }
+  }
+
   void _startReassessment() {
     setState(() {
       _answers.clear();
       _isReassessing = true;
     });
-    _scrollController.animateTo(
-      350,
-      duration: const Duration(milliseconds: 250),
-      curve: Curves.easeOut,
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _scrollToSection(_diagnosticSectionKey);
+    });
+  }
+
+  Future<void> _scrollToSection(GlobalKey key) async {
+    final sectionContext = key.currentContext;
+    if (sectionContext == null) return;
+    await Scrollable.ensureVisible(
+      sectionContext,
+      duration: const Duration(milliseconds: 500),
+      curve: Curves.easeInOutCubic,
+      alignment: 0.06,
     );
   }
 
@@ -398,17 +450,16 @@ class _SkillMatchScreenState extends ConsumerState<SkillMatchScreen> {
       _roadmap = null;
       _rankedProgrammes = const [];
       _assessmentHistory = const [];
-      _aiNotice = null;
+      _coachMessages = const [];
+      _coachError = null;
       _persistenceNotice = null;
       _isReassessing = false;
     });
-    _goalController.clear();
-    _customRoleController.clear();
     if (_scrollController.hasClients) {
       await _scrollController.animateTo(
         0,
-        duration: const Duration(milliseconds: 220),
-        curve: Curves.easeOut,
+        duration: const Duration(milliseconds: 450),
+        curve: Curves.easeInOutCubic,
       );
     }
   }
@@ -425,6 +476,7 @@ class _SkillMatchScreenState extends ConsumerState<SkillMatchScreen> {
   Widget build(BuildContext context) {
     final profile = _selectedProfile;
     final analysis = _analysis;
+    final ageGroups = _workforceEngine.ageGroups(_workforceSignals);
     final baseline = _assessmentHistory.length > 1
         ? _assessmentHistory.first
         : null;
@@ -461,27 +513,25 @@ class _SkillMatchScreenState extends ConsumerState<SkillMatchScreen> {
               hasAssessment: analysis != null,
               hasRoadmap: _roadmap != null,
             ),
-            if (_workforceSignal != null) ...[
-              const SizedBox(height: 12),
-              _WorkforceSignalCard(signal: _workforceSignal!),
-            ],
+            const SizedBox(height: 12),
+            MalaysiaWorkforceInsightCard(
+              ageGroups: ageGroups,
+              selectedAgeGroup: _selectedAgeGroup,
+              onAgeGroupChanged: _changeAgeGroup,
+              isLoading: _isLoadingWorkforce,
+              insight: _workforceInsight,
+              error: _workforceError,
+            ),
             const SizedBox(height: 20),
-            _CareerGoalSection(
-              goalController: _goalController,
-              customRoleController: _customRoleController,
+            _TargetRoleSection(
+              profiles: _roleProfiles,
+              libraryStatus: _roleLibraryStatus,
               selectedProfile: profile,
-              isInterpreting: _isInterpreting,
-              onInterpret: _interpretCareerGoal,
               onRoleSelected: (id) {
-                final selected = RoleProfileCatalogue.byId(id);
+                final selected = _roleCatalogue.byId(id);
                 if (selected != null) _selectRole(selected);
               },
-              onCreateCustomRole: _createCustomRole,
             ),
-            if (_aiNotice != null) ...[
-              const SizedBox(height: 9),
-              _NoticeCard(text: _aiNotice!, icon: Icons.auto_awesome_outlined),
-            ],
             if (_isLoadingHistory) ...[
               const SizedBox(height: 14),
               const LinearProgressIndicator(),
@@ -496,6 +546,7 @@ class _SkillMatchScreenState extends ConsumerState<SkillMatchScreen> {
                 (analysis == null || _isReassessing)) ...[
               const SizedBox(height: 24),
               SkillDiagnosticSection(
+                key: _diagnosticSectionKey,
                 profile: profile,
                 answers: _answers,
                 onAnswerChanged: _setAnswer,
@@ -513,6 +564,12 @@ class _SkillMatchScreenState extends ConsumerState<SkillMatchScreen> {
                 catalogueStatus: _catalogueStatus,
                 savedProgrammeIds: _savedProgrammeIds,
                 onSave: _saveProgramme,
+                fallbackQuery: [
+                  profile!.title,
+                  ...analysis.priorityGaps
+                      .take(3)
+                      .map((gap) => gap.competency.name),
+                ].join(' '),
               ),
               if (_roadmap != null) ...[
                 const SizedBox(height: 24),
@@ -523,6 +580,13 @@ class _SkillMatchScreenState extends ConsumerState<SkillMatchScreen> {
                   onReassess: _startReassessment,
                 ),
               ],
+              const SizedBox(height: 24),
+              SkillCoachPanel(
+                messages: _coachMessages,
+                isThinking: _isCoachThinking,
+                error: _coachError,
+                onAsk: _askCoach,
+              ),
             ],
             if (_persistenceNotice != null) ...[
               const SizedBox(height: 12),
@@ -538,59 +602,37 @@ class _SkillMatchScreenState extends ConsumerState<SkillMatchScreen> {
   }
 }
 
-class _CareerGoalSection extends StatelessWidget {
-  const _CareerGoalSection({
-    required this.goalController,
-    required this.customRoleController,
+class _TargetRoleSection extends StatelessWidget {
+  const _TargetRoleSection({
+    required this.profiles,
+    required this.libraryStatus,
     required this.selectedProfile,
-    required this.isInterpreting,
-    required this.onInterpret,
     required this.onRoleSelected,
-    required this.onCreateCustomRole,
   });
 
-  final TextEditingController goalController;
-  final TextEditingController customRoleController;
+  final List<RoleCompetencyProfile> profiles;
+  final String libraryStatus;
   final RoleCompetencyProfile? selectedProfile;
-  final bool isInterpreting;
-  final VoidCallback onInterpret;
   final ValueChanged<String> onRoleSelected;
-  final VoidCallback onCreateCustomRole;
 
   @override
   Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const SpecDivider(label: 'STEP 1 / CAREER GOAL'),
+        const SpecDivider(label: 'STEP 1 / TARGET ROLE'),
         const SizedBox(height: 13),
-        TextField(
-          controller: goalController,
-          textInputAction: TextInputAction.done,
-          onSubmitted: (_) => onInterpret(),
-          decoration: InputDecoration(
-            labelText: 'Career goal',
-            hintText: 'I want to become a software engineer',
-            suffixIcon: IconButton(
-              onPressed: isInterpreting ? null : onInterpret,
-              tooltip: 'Interpret goal',
-              icon: isInterpreting
-                  ? const Padding(
-                      padding: EdgeInsets.all(12),
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.arrow_forward),
-            ),
-          ),
-        ),
-        const SizedBox(height: 10),
         DropdownButtonFormField<String>(
           key: ValueKey(selectedProfile?.id),
+          isExpanded: true,
           initialValue: selectedProfile?.isCustom == false
               ? selectedProfile?.id
               : null,
-          decoration: const InputDecoration(labelText: 'Confirm target role'),
-          items: RoleProfileCatalogue.profiles
+          decoration: const InputDecoration(
+            labelText: 'Target role',
+            hintText: 'Choose the role you want to assess',
+          ),
+          items: profiles
               .map(
                 (profile) => DropdownMenuItem(
                   value: profile.id,
@@ -602,39 +644,65 @@ class _CareerGoalSection extends StatelessWidget {
             if (value != null) onRoleSelected(value);
           },
         ),
-        const SizedBox(height: 10),
-        Row(
-          children: [
-            Expanded(
-              child: TextField(
-                controller: customRoleController,
-                decoration: const InputDecoration(
-                  labelText: 'Or create a custom target role',
-                ),
-              ),
-            ),
-            const SizedBox(width: 8),
-            OutlinedButton(
-              onPressed: onCreateCustomRole,
-              child: const Text('Create'),
-            ),
-          ],
+        const SizedBox(height: 7),
+        Text(
+          libraryStatus,
+          style: const TextStyle(color: AppColors.slate, fontSize: 11),
         ),
         if (selectedProfile != null) ...[
           const SizedBox(height: 9),
           Card(
             child: Padding(
               padding: const EdgeInsets.all(12),
-              child: Row(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Icon(Icons.verified_outlined, color: AppColors.green),
-                  const SizedBox(width: 9),
-                  Expanded(
-                    child: Text(
-                      '${selectedProfile!.title} · ${selectedProfile!.competencies.length} weighted competencies',
-                      style: const TextStyle(fontWeight: FontWeight.w700),
-                    ),
+                  Row(
+                    children: [
+                      const Icon(
+                        Icons.verified_outlined,
+                        color: AppColors.green,
+                      ),
+                      const SizedBox(width: 9),
+                      Expanded(
+                        child: Text(
+                          '${selectedProfile!.title} - ${selectedProfile!.competencies.length} weighted competencies',
+                          style: const TextStyle(fontWeight: FontWeight.w700),
+                        ),
+                      ),
+                    ],
                   ),
+                  if (selectedProfile!.summary.isNotEmpty) ...[
+                    const SizedBox(height: 6),
+                    Text(
+                      selectedProfile!.summary,
+                      style: const TextStyle(
+                        color: AppColors.slate,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                  if (selectedProfile!.frameworkNote.isNotEmpty) ...[
+                    const SizedBox(height: 5),
+                    Text(
+                      selectedProfile!.frameworkNote,
+                      style: const TextStyle(
+                        color: AppColors.slate,
+                        fontSize: 10,
+                      ),
+                    ),
+                  ],
+                  if (selectedProfile!.frameworkSourceName.isNotEmpty) ...[
+                    const SizedBox(height: 5),
+                    Text(
+                      'Role reference: ${selectedProfile!.frameworkSourceName}',
+                      style: const TextStyle(
+                        color: AppColors.green,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -689,31 +757,6 @@ class _FlowStrip extends StatelessWidget {
       ),
     );
   }
-}
-
-class _WorkforceSignalCard extends StatelessWidget {
-  const _WorkforceSignalCard({required this.signal});
-
-  final WorkforceSkillSignal signal;
-
-  @override
-  Widget build(BuildContext context) => Card(
-    child: Padding(
-      padding: const EdgeInsets.all(12),
-      child: Row(
-        children: [
-          const Icon(Icons.public, color: AppColors.navy, size: 19),
-          const SizedBox(width: 9),
-          Expanded(
-            child: Text(
-              'Malaysia workforce context: ${signal.variable}, ${signal.value.toStringAsFixed(1)} ${signal.unit}. Context only; it does not affect your score.',
-              style: const TextStyle(color: AppColors.slate, fontSize: 11),
-            ),
-          ),
-        ],
-      ),
-    ),
-  );
 }
 
 class _NoticeCard extends StatelessWidget {

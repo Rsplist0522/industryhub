@@ -69,6 +69,7 @@ void main() {
 
       expect(result.coveredSkillIds, containsAll(['code', 'sql']));
       expect(result.matchScore, greaterThan(85));
+      expect(result.evidenceCoverage, 100);
     });
 
     test('scores a weak partial match below a strong match', () {
@@ -131,6 +132,7 @@ void main() {
           4,
         );
         expect(result.reasons.join(' '), contains('excluded'));
+        expect(result.evidenceCoverage, 50);
       },
     );
 

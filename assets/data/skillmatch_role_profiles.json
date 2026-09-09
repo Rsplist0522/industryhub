@@ -1,0 +1,173 @@
+{
+  "version": 1,
+  "framework_note": "IndustryHub prototype competency profiles for Malaysian industrial and digital roles. Role scope is aligned with MASCO occupation families; competency targets are transparent assessment assumptions, not government-certified standards.",
+  "framework_source_name": "DOSM Malaysia Standard Classification of Occupations (MASCO) 2020",
+  "framework_source_url": "https://www.dosm.gov.my/portal-main/downloadslist/economic",
+  "profiles": [
+    {
+      "id": "software_engineer",
+      "title": "Software Engineer",
+      "industry": "Digital technology",
+      "summary": "Builds and maintains software used in industrial and digital operations.",
+      "aliases": ["software developer", "developer", "programmer", "app developer"],
+      "competencies": [
+        {"id":"programming_fundamentals","name":"Programming Fundamentals","target_level":85,"weight":0.25,"category":"Foundation","keywords":["programming","coding","software engineering","software development"]},
+        {"id":"git_version_control","name":"Git / Version Control","target_level":70,"weight":0.15,"category":"Version control","prerequisite_ids":["programming_fundamentals"],"keywords":["git","github","version control"]},
+        {"id":"databases_sql","name":"Databases / SQL","target_level":70,"weight":0.15,"category":"Data","prerequisite_ids":["programming_fundamentals"],"keywords":["database","sql","data"]},
+        {"id":"backend_apis","name":"Backend / APIs","target_level":75,"weight":0.20,"category":"Development","prerequisite_ids":["programming_fundamentals","databases_sql"],"keywords":["backend","api","web development","server"]},
+        {"id":"problem_solving","name":"Problem Solving","target_level":80,"weight":0.15,"category":"Core skill","keywords":["problem solving","algorithms","analytical"]},
+        {"id":"development_practices","name":"Software Development Practices","target_level":70,"weight":0.10,"category":"Practice","prerequisite_ids":["git_version_control"],"keywords":["testing","agile","software engineering","devops"]}
+      ]
+    },
+    {
+      "id": "data_analyst",
+      "title": "Data Analyst",
+      "industry": "Digital technology",
+      "summary": "Turns operational data into evidence for planning and process improvement.",
+      "aliases": ["business intelligence analyst", "bi analyst", "data analytics"],
+      "competencies": [
+        {"id":"data_literacy","name":"Data Literacy","target_level":80,"weight":0.20,"category":"Foundation","keywords":["data literacy","analytics","data analysis"]},
+        {"id":"sql","name":"SQL","target_level":80,"weight":0.22,"category":"Data","prerequisite_ids":["data_literacy"],"keywords":["sql","database"]},
+        {"id":"spreadsheets","name":"Spreadsheets","target_level":75,"weight":0.15,"category":"Tools","keywords":["excel","spreadsheet"]},
+        {"id":"visualisation","name":"Data Visualisation","target_level":75,"weight":0.18,"category":"Communication","prerequisite_ids":["data_literacy"],"keywords":["visualisation","visualization","power bi","tableau"]},
+        {"id":"statistics","name":"Applied Statistics","target_level":70,"weight":0.15,"category":"Analysis","prerequisite_ids":["data_literacy"],"keywords":["statistics","analysis"]},
+        {"id":"business_communication","name":"Business Communication","target_level":70,"weight":0.10,"category":"Communication","keywords":["communication","reporting","data storytelling"]}
+      ]
+    },
+    {
+      "id": "cnc_operator",
+      "title": "CNC Operator",
+      "industry": "Manufacturing",
+      "summary": "Sets up and operates computer-controlled machining equipment safely.",
+      "aliases": ["cnc machinist", "machine tool operator", "machinist"],
+      "competencies": [
+        {"id":"technical_drawing","name":"Technical Drawing","target_level":70,"weight":0.15,"category":"Foundation","keywords":["technical drawing","blueprint"]},
+        {"id":"cnc_setup","name":"CNC Setup & Operation","target_level":85,"weight":0.28,"category":"Machining","prerequisite_ids":["technical_drawing"],"keywords":["cnc","machining","milling","lathe"]},
+        {"id":"measurement","name":"Precision Measurement","target_level":80,"weight":0.18,"category":"Quality","keywords":["metrology","measurement","inspection"]},
+        {"id":"gcode","name":"G-code Fundamentals","target_level":70,"weight":0.17,"category":"Programming","prerequisite_ids":["cnc_setup"],"keywords":["g-code","cnc programming"]},
+        {"id":"machine_safety","name":"Machine Safety","target_level":85,"weight":0.12,"category":"Safety","keywords":["machine safety","occupational safety","osh"]},
+        {"id":"quality_checks","name":"Quality Checks","target_level":70,"weight":0.10,"category":"Quality","prerequisite_ids":["measurement"],"keywords":["quality","inspection"]}
+      ]
+    },
+    {
+      "id": "quality_inspector",
+      "title": "Quality Inspector",
+      "industry": "Manufacturing",
+      "summary": "Verifies product quality, measurements, standards, and corrective actions.",
+      "aliases": ["quality control inspector", "qc inspector", "quality technician"],
+      "competencies": [
+        {"id":"inspection_methods","name":"Inspection Methods","target_level":85,"weight":0.25,"category":"Inspection","keywords":["inspection","quality control"]},
+        {"id":"measurement_tools","name":"Measurement Tools","target_level":80,"weight":0.20,"category":"Tools","keywords":["metrology","measurement"]},
+        {"id":"quality_standards","name":"Quality Standards / ISO","target_level":75,"weight":0.20,"category":"Standards","keywords":["iso","quality systems","audit"]},
+        {"id":"defect_analysis","name":"Defect Analysis","target_level":75,"weight":0.15,"category":"Analysis","prerequisite_ids":["inspection_methods"],"keywords":["defect","root cause"]},
+        {"id":"quality_documentation","name":"Quality Documentation","target_level":70,"weight":0.10,"category":"Practice","keywords":["documentation","reporting"]},
+        {"id":"workplace_safety","name":"Workplace Safety","target_level":75,"weight":0.10,"category":"Safety","keywords":["safety","osh"]}
+      ]
+    },
+    {
+      "id": "production_supervisor",
+      "title": "Production Supervisor",
+      "industry": "Manufacturing",
+      "summary": "Coordinates people, output, safety, quality, and continuous improvement.",
+      "aliases": ["manufacturing supervisor", "production team leader", "line supervisor"],
+      "competencies": [
+        {"id":"production_planning","name":"Production Planning","target_level":85,"weight":0.23,"category":"Operations","keywords":["production planning","scheduling"]},
+        {"id":"team_leadership","name":"Team Leadership","target_level":80,"weight":0.20,"category":"Leadership","keywords":["supervision","leadership"]},
+        {"id":"lean_manufacturing","name":"Lean Manufacturing","target_level":75,"weight":0.18,"category":"Improvement","keywords":["lean","5s","kaizen"]},
+        {"id":"quality_management","name":"Quality Management","target_level":75,"weight":0.15,"category":"Quality","keywords":["quality","iso"]},
+        {"id":"safety_management","name":"Safety Management","target_level":80,"weight":0.14,"category":"Safety","keywords":["safety","osh"]},
+        {"id":"shift_communication","name":"Shift Communication","target_level":75,"weight":0.10,"category":"Communication","keywords":["shift","handover","communication"]}
+      ]
+    },
+    {
+      "id": "welding_technician",
+      "title": "Welding Technician",
+      "industry": "Manufacturing",
+      "summary": "Performs welding work while controlling quality, materials, and safety.",
+      "aliases": ["welder", "welding specialist", "fabrication technician"],
+      "competencies": [
+        {"id":"welding_processes","name":"Welding Processes","target_level":85,"weight":0.28,"category":"Technical","keywords":["welding","mig","tig","arc"]},
+        {"id":"drawing_weld_symbols","name":"Drawings & Weld Symbols","target_level":75,"weight":0.15,"category":"Foundation","keywords":["weld symbols","technical drawing"]},
+        {"id":"weld_quality","name":"Weld Quality Inspection","target_level":80,"weight":0.20,"category":"Quality","prerequisite_ids":["welding_processes"],"keywords":["weld quality","inspection"]},
+        {"id":"materials","name":"Materials Knowledge","target_level":70,"weight":0.12,"category":"Foundation","keywords":["materials","metallurgy"]},
+        {"id":"welding_safety","name":"Welding Safety","target_level":90,"weight":0.15,"category":"Safety","keywords":["welding safety","safety","osh"]},
+        {"id":"equipment_care","name":"Equipment Setup & Care","target_level":75,"weight":0.10,"category":"Practice","prerequisite_ids":["welding_processes"],"keywords":["equipment","maintenance"]}
+      ]
+    },
+    {
+      "id": "industrial_automation_technician",
+      "title": "Industrial Automation Technician",
+      "industry": "Smart manufacturing",
+      "summary": "Installs and troubleshoots sensors, PLCs, and automated production systems.",
+      "aliases": ["automation technician", "plc technician", "controls technician"],
+      "competencies": [
+        {"id":"electrical_fundamentals","name":"Electrical Fundamentals","target_level":80,"weight":0.18,"category":"Foundation","keywords":["electrical","electronics","circuits"]},
+        {"id":"plc_programming","name":"PLC Programming","target_level":85,"weight":0.25,"category":"Automation","prerequisite_ids":["electrical_fundamentals"],"keywords":["plc","programmable logic controller","ladder logic"]},
+        {"id":"sensors_instrumentation","name":"Sensors & Instrumentation","target_level":80,"weight":0.18,"category":"Instrumentation","prerequisite_ids":["electrical_fundamentals"],"keywords":["sensors","instrumentation","calibration"]},
+        {"id":"industrial_networks","name":"Industrial Networks","target_level":70,"weight":0.14,"category":"Connectivity","prerequisite_ids":["plc_programming"],"keywords":["industrial network","modbus","profinet","scada"]},
+        {"id":"automation_troubleshooting","name":"Automation Troubleshooting","target_level":85,"weight":0.15,"category":"Maintenance","prerequisite_ids":["plc_programming","sensors_instrumentation"],"keywords":["troubleshooting","fault finding","automation maintenance"]},
+        {"id":"electrical_safety","name":"Electrical Safety","target_level":90,"weight":0.10,"category":"Safety","keywords":["electrical safety","lockout tagout","osh"]}
+      ]
+    },
+    {
+      "id": "maintenance_technician",
+      "title": "Industrial Maintenance Technician",
+      "industry": "Manufacturing",
+      "summary": "Maintains production assets and reduces unplanned equipment downtime.",
+      "aliases": ["maintenance technician", "plant technician", "equipment technician"],
+      "competencies": [
+        {"id":"mechanical_fundamentals","name":"Mechanical Fundamentals","target_level":80,"weight":0.18,"category":"Foundation","keywords":["mechanical","machinery","mechanics"]},
+        {"id":"preventive_maintenance","name":"Preventive Maintenance","target_level":85,"weight":0.22,"category":"Maintenance","prerequisite_ids":["mechanical_fundamentals"],"keywords":["preventive maintenance","planned maintenance","tpm"]},
+        {"id":"fault_diagnosis","name":"Fault Diagnosis","target_level":85,"weight":0.22,"category":"Troubleshooting","prerequisite_ids":["mechanical_fundamentals"],"keywords":["fault diagnosis","troubleshooting","root cause"]},
+        {"id":"maintenance_tools","name":"Maintenance Tools & Measurement","target_level":75,"weight":0.14,"category":"Tools","keywords":["maintenance tools","measurement","condition monitoring"]},
+        {"id":"maintenance_records","name":"Maintenance Records","target_level":70,"weight":0.10,"category":"Practice","keywords":["cmms","maintenance records","documentation"]},
+        {"id":"maintenance_safety","name":"Maintenance Safety","target_level":90,"weight":0.14,"category":"Safety","keywords":["maintenance safety","lockout tagout","osh"]}
+      ]
+    },
+    {
+      "id": "cybersecurity_analyst",
+      "title": "Cybersecurity Analyst",
+      "industry": "Digital infrastructure",
+      "summary": "Protects business systems, networks, and operational data from cyber threats.",
+      "aliases": ["security analyst", "soc analyst", "information security analyst"],
+      "competencies": [
+        {"id":"network_fundamentals","name":"Network Fundamentals","target_level":80,"weight":0.18,"category":"Foundation","keywords":["networking","tcp ip","network security"]},
+        {"id":"security_operations","name":"Security Operations","target_level":85,"weight":0.24,"category":"Operations","prerequisite_ids":["network_fundamentals"],"keywords":["soc","siem","security monitoring"]},
+        {"id":"threat_analysis","name":"Threat & Vulnerability Analysis","target_level":80,"weight":0.20,"category":"Analysis","prerequisite_ids":["network_fundamentals"],"keywords":["threat analysis","vulnerability","cybersecurity"]},
+        {"id":"incident_response","name":"Incident Response","target_level":80,"weight":0.18,"category":"Response","prerequisite_ids":["security_operations"],"keywords":["incident response","digital forensics"]},
+        {"id":"identity_access","name":"Identity & Access Management","target_level":75,"weight":0.10,"category":"Controls","keywords":["identity management","access control","iam"]},
+        {"id":"security_governance","name":"Security Governance","target_level":70,"weight":0.10,"category":"Governance","keywords":["security policy","risk management","iso 27001"]}
+      ]
+    },
+    {
+      "id": "tvet_instructor",
+      "title": "TVET Instructor",
+      "industry": "Technical and vocational education",
+      "summary": "Develops job-ready technical skills through structured instruction, practical demonstrations, assessment, and safe workshop learning.",
+      "aliases": ["teacher", "technical teacher", "vocational teacher", "skills trainer", "technical trainer", "vocational instructor", "educator"],
+      "competencies": [
+        {"id":"technical_subject_expertise","name":"Technical Subject Expertise","target_level":85,"weight":0.25,"category":"Technical","keywords":["technical education","vocational training","subject expertise","tvet"]},
+        {"id":"instructional_planning","name":"Instructional Planning","target_level":80,"weight":0.20,"category":"Teaching","keywords":["lesson planning","instructional design","curriculum development"]},
+        {"id":"practical_demonstration","name":"Practical Demonstration & Coaching","target_level":80,"weight":0.20,"category":"Teaching","prerequisite_ids":["technical_subject_expertise"],"keywords":["practical teaching","demonstration","coaching","facilitation"]},
+        {"id":"competency_assessment","name":"Competency-based Assessment","target_level":75,"weight":0.15,"category":"Assessment","prerequisite_ids":["instructional_planning"],"keywords":["student assessment","competency assessment","rubric","feedback"]},
+        {"id":"digital_learning_tools","name":"Digital Learning Tools","target_level":70,"weight":0.10,"category":"Digital","keywords":["educational technology","online learning","learning management system"]},
+        {"id":"workshop_learning_safety","name":"Workshop Learning & Safety","target_level":85,"weight":0.10,"category":"Safety","keywords":["workshop safety","laboratory safety","occupational safety","osh"]}
+      ]
+    },
+    {
+      "id": "supply_chain_planner",
+      "title": "Supply Chain Planner",
+      "industry": "Industrial logistics",
+      "summary": "Balances demand, inventory, suppliers, and production capacity.",
+      "aliases": ["production planner", "material planner", "demand planner"],
+      "competencies": [
+        {"id":"demand_planning","name":"Demand Planning","target_level":80,"weight":0.22,"category":"Planning","keywords":["demand planning","forecasting"]},
+        {"id":"inventory_management","name":"Inventory Management","target_level":85,"weight":0.22,"category":"Inventory","keywords":["inventory","materials management","stock control"]},
+        {"id":"production_scheduling","name":"Production Scheduling","target_level":80,"weight":0.18,"category":"Operations","prerequisite_ids":["demand_planning"],"keywords":["production scheduling","capacity planning"]},
+        {"id":"supplier_coordination","name":"Supplier Coordination","target_level":75,"weight":0.13,"category":"Suppliers","keywords":["supplier management","procurement","vendor"]},
+        {"id":"supply_chain_analytics","name":"Supply Chain Analytics","target_level":75,"weight":0.15,"category":"Analytics","keywords":["supply chain analytics","excel","data analysis"]},
+        {"id":"logistics_risk","name":"Logistics Risk Management","target_level":70,"weight":0.10,"category":"Risk","keywords":["supply chain risk","logistics","business continuity"]}
+      ]
+    }
+  ]
+}

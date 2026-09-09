@@ -149,6 +149,17 @@ class _CompetencyQuestion extends StatelessWidget {
                 );
               },
             ),
+            if (selected != null) ...[
+              const SizedBox(height: 8),
+              Text(
+                selected!.evidenceAnchor,
+                style: const TextStyle(
+                  color: AppColors.slate,
+                  fontSize: 11,
+                  height: 1.35,
+                ),
+              ),
+            ],
           ],
         ),
       ),

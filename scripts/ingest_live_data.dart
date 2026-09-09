@@ -4,7 +4,7 @@ import 'dart:io';
 import 'package:html/parser.dart' as html_parser;
 import 'package:http/http.dart' as http;
 
-const _courseraSearchUrl = 'https://www.coursera.org/courses';
+const _courseraSearchUrl = 'https://www.coursera.org/search';
 const _msicApiUrl =
     'https://api.data.gov.my/data-catalogue?id=msic&limit=10000';
 const _workforceSkillsApiUrl =
@@ -32,8 +32,7 @@ Future<void> main(List<String> args) async {
     return;
   }
 
-  final courseQuery =
-      _argumentValue(args, '--course-query') ?? 'software engineering';
+  final courseQuery = _argumentValue(args, '--course-query');
   final api = dryRun || supabaseUrl == null || serviceRoleKey == null
       ? null
       : _SupabaseRestClient(Uri.parse(supabaseUrl), serviceRoleKey);
@@ -46,7 +45,10 @@ Future<void> main(List<String> args) async {
     var ppiCount = 0;
     var metalCount = 0;
     try {
-      courseCount = await _importCoursera(client, api, courseQuery);
+      final specifications = courseQuery == null
+          ? await _loadSkillMatchCourseSpecifications()
+          : [_CourseImportSpecification(query: courseQuery)];
+      courseCount = await _importCoursera(client, api, specifications);
     } catch (error) {
       stderr.writeln('Coursera source skipped: $error');
     }
@@ -97,6 +99,7 @@ Future<void> _upsertSources(_SupabaseRestClient? api) async {
       'access_type': 'Dart HTML crawl',
       'source_url': _courseraSearchUrl,
       'requires_api_key': false,
+      'license': null,
       'notes':
           'Course records are imported from the public search page with outbound course URLs.',
     },
@@ -133,14 +136,67 @@ Future<void> _upsertSources(_SupabaseRestClient? api) async {
       'notes':
           'Historical monthly PPI rows imported from the DOSM public CSV endpoint.',
     },
-  ]);
+  ], onConflict: 'id');
+}
+
+Future<List<_CourseImportSpecification>>
+_loadSkillMatchCourseSpecifications() async {
+  final decoded = jsonDecode(
+    await File('assets/data/skillmatch_role_profiles.json').readAsString(),
+  );
+  if (decoded is! Map || decoded['profiles'] is! List) {
+    throw const FormatException('SkillMatch role profile asset is invalid.');
+  }
+  return (decoded['profiles'] as List)
+      .whereType<Map>()
+      .map((raw) {
+        final profile = Map<String, dynamic>.from(raw);
+        final competencies =
+            (profile['competencies'] as List? ?? const [])
+                .whereType<Map>()
+                .map(Map<String, dynamic>.from)
+                .toList()
+              ..sort(
+                (a, b) => ((b['weight'] as num?) ?? 0).compareTo(
+                  (a['weight'] as num?) ?? 0,
+                ),
+              );
+        final skills = competencies
+            .take(3)
+            .map((skill) => '${skill['name'] ?? ''}'.trim())
+            .where((skill) => skill.isNotEmpty)
+            .toList();
+        final title = '${profile['title'] ?? ''}'.trim();
+        return _CourseImportSpecification(
+          query: [title, ...skills].join(' '),
+          roleId: '${profile['id'] ?? ''}'.trim(),
+          roleTitle: title,
+          industry: '${profile['industry'] ?? ''}'.trim(),
+          skills: skills,
+        );
+      })
+      .where((specification) => specification.query.isNotEmpty)
+      .toList();
 }
 
 Future<int> _importCoursera(
   http.Client client,
   _SupabaseRestClient? api,
-  String query,
+  Iterable<_CourseImportSpecification> specifications,
 ) async {
+  var imported = 0;
+  for (final specification in specifications) {
+    imported += await _importCourseraQuery(client, api, specification);
+  }
+  return imported;
+}
+
+Future<int> _importCourseraQuery(
+  http.Client client,
+  _SupabaseRestClient? api,
+  _CourseImportSpecification specification,
+) async {
+  final query = specification.query;
   final uri = Uri.parse(
     '$_courseraSearchUrl?query=${Uri.encodeQueryComponent(query)}',
   );
@@ -174,7 +230,9 @@ Future<int> _importCoursera(
           'coursera-${base64Url.encode(utf8.encode(courseUrl)).replaceAll('=', '')}',
       'name': title,
       'provider': _providerFromCard(anchor) ?? 'Coursera provider',
-      'skills': _skillsForQuery(query),
+      'skills': specification.skills.isEmpty
+          ? _skillsForQuery(query)
+          : specification.skills,
       'level': 'Not specified',
       'duration_days': 0,
       'source_name': 'Coursera public course catalogue',
@@ -184,14 +242,38 @@ Future<int> _importCoursera(
           : 'Course or certificate details',
       'summary':
           'Live course listing imported for “$query”. Open the source page for current syllabus, pricing, and certificate terms.',
+      'industry': specification.industry,
+      'target_roles': [
+        if (specification.roleId.isNotEmpty) specification.roleId,
+        if (specification.roleTitle.isNotEmpty) specification.roleTitle,
+      ],
+      'metadata_note': specification.roleId.isEmpty
+          ? 'Skill tags were derived from the requested provider search topic. Verify the syllabus at the source page.'
+          : 'Role and skill tags were derived from the bundled SkillMatch search specification. Verify the syllabus at the source page.',
       'is_active': true,
     });
     if (rows.length == 30) break;
   }
   if (rows.isNotEmpty && api != null) {
-    await api.upsert('training_programmes', rows);
+    await api.upsert('training_programmes', rows, onConflict: 'id');
   }
   return rows.length;
+}
+
+class _CourseImportSpecification {
+  const _CourseImportSpecification({
+    required this.query,
+    this.roleId = '',
+    this.roleTitle = '',
+    this.industry = '',
+    this.skills = const [],
+  });
+
+  final String query;
+  final String roleId;
+  final String roleTitle;
+  final String industry;
+  final List<String> skills;
 }
 
 String? _providerFromCard(dynamic anchor) {
@@ -275,7 +357,7 @@ Future<int> _importMsic(http.Client client, _SupabaseRestClient? api) async {
       .toList();
   if (api != null) {
     for (final chunk in _chunks(rows, 500)) {
-      await api.upsert('msic_codes', chunk);
+      await api.upsert('msic_codes', chunk, onConflict: 'item_code');
     }
   }
   return rows.length;
@@ -328,7 +410,11 @@ Future<int> _importFredMetalIndexes(
     }
     if (api != null) {
       for (final chunk in _chunks(rows, 500)) {
-        await api.upsert('price_index_observations', chunk);
+        await api.upsert(
+          'price_index_observations',
+          chunk,
+          onConflict: 'dataset_id,series,observed_on',
+        );
       }
     }
     count += rows.length;
@@ -387,7 +473,11 @@ Future<int> _importWorkforceSkills(
       .toList();
   if (api != null) {
     for (final chunk in _chunks(rows, 500)) {
-      await api.upsert('workforce_skill_signals', chunk);
+      await api.upsert(
+        'workforce_skill_signals',
+        chunk,
+        onConflict: 'dataset_id,variable,age_group,observed_on',
+      );
     }
   }
   return rows.length;
@@ -423,7 +513,11 @@ Future<int> _importPpi(http.Client client, _SupabaseRestClient? api) async {
   }
   if (api != null) {
     for (final chunk in _chunks(rows, 500)) {
-      await api.upsert('price_index_observations', chunk);
+      await api.upsert(
+        'price_index_observations',
+        chunk,
+        onConflict: 'dataset_id,series,observed_on',
+      );
     }
   }
   return rows.length;
@@ -444,9 +538,16 @@ class _SupabaseRestClient {
   final String serviceRoleKey;
   final http.Client _client = http.Client();
 
-  Future<void> upsert(String table, List<Map<String, dynamic>> rows) async {
+  Future<void> upsert(
+    String table,
+    List<Map<String, dynamic>> rows, {
+    String? onConflict,
+  }) async {
     if (rows.isEmpty) return;
-    final endpoint = baseUrl.resolve('/rest/v1/$table');
+    var endpoint = baseUrl.resolve('/rest/v1/$table');
+    if (onConflict != null && onConflict.isNotEmpty) {
+      endpoint = endpoint.replace(queryParameters: {'on_conflict': onConflict});
+    }
     final response = await _client
         .post(
           endpoint,
