@@ -1,19 +1,40 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../app/theme.dart';
 import '../../../core/app_state.dart';
+import '../../../core/auth_access.dart';
 import '../../../core/widgets.dart';
 import '../../../core/validators.dart';
 
+String _confirmationRedirectUrl() {
+  if (kIsWeb) return '${Uri.base.origin}/auth/confirmed';
+
+  if (defaultTargetPlatform == TargetPlatform.android ||
+      defaultTargetPlatform == TargetPlatform.iOS) {
+    return 'com.example.industryhub://login-callback/';
+  }
+
+  final configuredUrl = dotenv.env['AUTH_WEB_REDIRECT_URL']?.trim() ?? '';
+  final configuredUri = Uri.tryParse(configuredUrl);
+  if (configuredUri != null &&
+      (configuredUri.scheme == 'https' || configuredUri.scheme == 'http') &&
+      configuredUri.host.isNotEmpty) {
+    return configuredUri.toString();
+  }
+  return 'http://localhost:49311/auth/confirmed';
+}
 
 Future<String> _signedInDestination() async {
-  final user = Supabase.instance.client.auth.currentUser;
-  if (user == null) return '/login';
+  final client = Supabase.instance.client;
+  final user = client.auth.currentUser;
+  if (user == null || !hasVerifiedSupabaseSession(client)) return '/login';
   try {
-    final row = await Supabase.instance.client
+    final row = await client
         .from('profiles')
         .select('role')
         .eq('user_id', user.id)
@@ -42,14 +63,18 @@ class _SplashScreenState extends State<SplashScreen> {
   Future<void> _restoreSession() async {
     await Future<void>.delayed(const Duration(milliseconds: 900));
     if (!mounted) return;
-    var hasSession = false;
+    var hasVerifiedSession = false;
     try {
-      hasSession = Supabase.instance.client.auth.currentSession != null;
+      final client = Supabase.instance.client;
+      hasVerifiedSession = hasVerifiedSupabaseSession(client);
+      if (client.auth.currentSession != null && !hasVerifiedSession) {
+        await client.auth.signOut();
+      }
     } catch (_) {
       // Widget tests or an interrupted bootstrap are treated as signed out.
     }
     if (!mounted) return;
-    if (!hasSession) {
+    if (!hasVerifiedSession) {
       context.go('/login');
       return;
     }
@@ -126,13 +151,39 @@ class _LoginScreenState extends State<LoginScreen> {
       _errorMessage = null;
     });
     try {
-      await Supabase.instance.client.auth.signInWithPassword(
+      final client = Supabase.instance.client;
+      final response = await client.auth.signInWithPassword(
         email: _email.text.trim(),
         password: _password.text,
       );
+      if (response.user?.emailConfirmedAt == null) {
+        await client.auth.signOut();
+        if (mounted) {
+          setState(() => _errorMessage = unverifiedEmailSignInMessage);
+        }
+        return;
+      }
+      if (response.session == null) {
+        throw const AuthException(
+          'Sign-in did not create a session. Please try again.',
+        );
+      }
       if (mounted) context.go(await _signedInDestination());
     } on AuthException catch (error) {
-      if (mounted) setState(() => _errorMessage = error.message);
+      if (isEmailNotConfirmedError(error)) {
+        try {
+          await Supabase.instance.client.auth.signOut();
+        } catch (_) {
+          // A rejected sign-in normally has no local session to clear.
+        }
+      }
+      if (mounted) {
+        setState(
+          () => _errorMessage = isEmailNotConfirmedError(error)
+              ? unverifiedEmailSignInMessage
+              : error.message,
+        );
+      }
     } catch (_) {
       if (mounted) {
         setState(
@@ -277,39 +328,32 @@ class _SignupScreenState extends State<SignupScreen> {
       _infoMessage = null;
     });
     try {
-      final response = await Supabase.instance.client.auth.signUp(
+      final client = Supabase.instance.client;
+      final response = await client.auth.signUp(
         email: _email.text.trim(),
         password: _password.text,
-        emailRedirectTo: 'com.example.industryhub://login-callback/',
+        emailRedirectTo: _confirmationRedirectUrl(),
         data: {
           'business_name': businessName,
           'sector': 'General manufacturing',
           'role': '',
         },
       );
-      final user = response.user;
-      if (user == null) throw const AuthException('Account creation failed.');
-      if (response.session == null) {
-        if (!mounted) return;
-        setState(() {
-          _isLoading = false;
-          _infoMessage =
-              'Account created. Check your email to confirm the account, then sign in.';
-        });
-        return;
+      if (response.session != null) {
+        await client.auth.signOut();
       }
-
-      await Supabase.instance.client
-          .from('profiles')
-          .update({
-            'business_name': businessName,
-            'sector': 'General manufacturing',
-            'role': '',
-          })
-          .eq('user_id', user.id);
-      if (mounted) context.go('/role-select');
+      if (!mounted) return;
+      setState(() => _infoMessage = safeSignupConfirmationMessage);
     } on AuthException catch (error) {
-      if (mounted) setState(() => _errorMessage = error.message);
+      if (mounted) {
+        setState(() {
+          if (isExistingAccountSignupError(error)) {
+            _infoMessage = safeSignupConfirmationMessage;
+          } else {
+            _errorMessage = error.message;
+          }
+        });
+      }
     } catch (_) {
       if (mounted) {
         setState(
@@ -385,7 +429,98 @@ class _SignupScreenState extends State<SignupScreen> {
                       : const Text('Create account'),
                 ),
               ),
+              const SizedBox(height: 10),
+              Center(
+                child: TextButton(
+                  onPressed: _isLoading ? null : () => context.go('/login'),
+                  child: const Text('Already have an account? Sign in'),
+                ),
+              ),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class EmailConfirmedScreen extends StatelessWidget {
+  const EmailConfirmedScreen({super.key, this.isVerifiedOverride});
+
+  @visibleForTesting
+  final bool? isVerifiedOverride;
+
+  bool get _isVerified {
+    if (isVerifiedOverride case final override?) return override;
+    try {
+      return Supabase.instance.client.auth.currentUser?.emailConfirmedAt !=
+          null;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<void> _goToSignIn(BuildContext context) async {
+    try {
+      await Supabase.instance.client.auth.signOut();
+    } catch (_) {
+      // Confirmation can succeed without a persisted local session.
+    }
+    if (context.mounted) context.go('/login');
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isVerified = _isVerified;
+    return Scaffold(
+      body: SafeArea(
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(24),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 480),
+              child: Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(28),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(
+                        Icons.mark_email_read_outlined,
+                        size: 52,
+                        color: AppColors.green,
+                      ),
+                      const SizedBox(height: 18),
+                      Text(
+                        isVerified
+                            ? 'Email verified successfully.'
+                            : 'Email confirmation could not be completed.',
+                        textAlign: TextAlign.center,
+                        style: Theme.of(context).textTheme.headlineSmall,
+                      ),
+                      const SizedBox(height: 10),
+                      Text(
+                        isVerified
+                            ? 'Your IndustryHub account is now active.'
+                            : 'The link may be invalid or expired. Request a new confirmation email, then try again.',
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(color: AppColors.slate),
+                      ),
+                      const SizedBox(height: 24),
+                      SizedBox(
+                        width: double.infinity,
+                        child: FilledButton(
+                          onPressed: () => _goToSignIn(context),
+                          child: Text(
+                            isVerified ? 'Sign in' : 'Back to sign in',
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
           ),
         ),
       ),
@@ -467,8 +602,10 @@ class _RoleSelectScreenState extends ConsumerState<RoleSelectScreen> {
 
   Future<void> _saveRole() async {
     if (_isSaving) return;
-    final user = Supabase.instance.client.auth.currentUser;
-    if (user == null) {
+    final client = Supabase.instance.client;
+    final user = client.auth.currentUser;
+    if (user == null || !hasVerifiedSupabaseSession(client)) {
+      if (client.auth.currentSession != null) await client.auth.signOut();
       if (mounted) context.go('/login');
       return;
     }
@@ -477,7 +614,7 @@ class _RoleSelectScreenState extends ConsumerState<RoleSelectScreen> {
       _errorMessage = null;
     });
     try {
-      await Supabase.instance.client
+      await client
           .from('profiles')
           .update({'role': selected})
           .eq('user_id', user.id);
@@ -487,7 +624,9 @@ class _RoleSelectScreenState extends ConsumerState<RoleSelectScreen> {
       if (mounted) setState(() => _errorMessage = error.message);
     } catch (_) {
       if (mounted) {
-        setState(() => _errorMessage = 'Role could not be saved. Please try again.');
+        setState(
+          () => _errorMessage = 'Role could not be saved. Please try again.',
+        );
       }
     } finally {
       if (mounted) setState(() => _isSaving = false);
@@ -563,5 +702,3 @@ class _RoleSelectScreenState extends ConsumerState<RoleSelectScreen> {
     );
   }
 }
-
-

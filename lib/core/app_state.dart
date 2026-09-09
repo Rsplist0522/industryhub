@@ -8,6 +8,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'auth_access.dart';
+
 class Listing {
   const Listing({
     required this.id,
@@ -42,20 +44,21 @@ class Listing {
     return text.replaceFirst(RegExp(r'\.?0+$'), '');
   }
 
-  Listing copyWith({String? owner, double? askingPricePerKg, String? status}) => Listing(
-    id: id,
-    type: type,
-    material: material,
-    quantity: quantity,
-    unit: unit,
-    location: location,
-    description: description,
-    owner: owner ?? this.owner,
-    ownerId: ownerId,
-    verified: verified,
-    askingPricePerKg: askingPricePerKg ?? this.askingPricePerKg,
-    status: status ?? this.status,
-  );
+  Listing copyWith({String? owner, double? askingPricePerKg, String? status}) =>
+      Listing(
+        id: id,
+        type: type,
+        material: material,
+        quantity: quantity,
+        unit: unit,
+        location: location,
+        description: description,
+        owner: owner ?? this.owner,
+        ownerId: ownerId,
+        verified: verified,
+        askingPricePerKg: askingPricePerKg ?? this.askingPricePerKg,
+        status: status ?? this.status,
+      );
 
   factory Listing.fromSupabase(Map<String, dynamic> data) {
     final rawQuantity = data['quantity'];
@@ -142,8 +145,9 @@ class IndustryHubState {
   final bool isLoading;
   final String userId;
 
-  int get activeListings =>
-      listings.where((item) => item.ownerId == userId && item.status == 'ACTIVE').length;
+  int get activeListings => listings
+      .where((item) => item.ownerId == userId && item.status == 'ACTIVE')
+      .length;
 
   IndustryHubState copyWith({
     CompanyProfile? profile,
@@ -189,7 +193,10 @@ class IndustryHubNotifier extends Notifier<IndustryHubState> {
     return const IndustryHubState();
   }
 
-  Future<User?> _ensureSignedInUser() async => _supabase.auth.currentUser;
+  Future<User?> _ensureSignedInUser() async {
+    if (!hasVerifiedSupabaseSession(_supabase)) return null;
+    return _supabase.auth.currentUser;
+  }
 
   Future<void> _loadProfileAndListings() async {
     if (!_disposed) state = state.copyWith(isLoading: true);
@@ -232,7 +239,11 @@ class IndustryHubNotifier extends Notifier<IndustryHubState> {
       final savedMatches = await _countOwnRows('saved_matches', user.id);
       final negotiations = await _countOwnRows('fair_price_sessions', user.id);
 
-      if (_disposed || _supabase.auth.currentUser?.id != user.id) return;
+      if (_disposed ||
+          !hasVerifiedSupabaseSession(_supabase) ||
+          _supabase.auth.currentUser?.id != user.id) {
+        return;
+      }
       state = state.copyWith(
         profile: profile,
         listings: listings,
@@ -490,10 +501,7 @@ class IndustryHubNotifier extends Notifier<IndustryHubState> {
     if (user == null) throw StateError('Sign in before removing a listing.');
 
     try {
-      await _supabase.rpc(
-        'withdraw_listing',
-        params: {'p_listing_id': id},
-      );
+      await _supabase.rpc('withdraw_listing', params: {'p_listing_id': id});
       if (_disposed) return;
       state = state.copyWith(
         listings: state.listings.where((item) => item.id != id).toList(),

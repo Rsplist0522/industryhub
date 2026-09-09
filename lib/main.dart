@@ -2,6 +2,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_web_plugins/url_strategy.dart';
+import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'app/router.dart';
@@ -10,7 +12,9 @@ import 'core/local_database.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  final supportsLocalSqlite = defaultTargetPlatform == TargetPlatform.android ||
+  if (kIsWeb) usePathUrlStrategy();
+  final supportsLocalSqlite =
+      defaultTargetPlatform == TargetPlatform.android ||
       defaultTargetPlatform == TargetPlatform.iOS ||
       defaultTargetPlatform == TargetPlatform.macOS;
   if (supportsLocalSqlite) {
@@ -42,8 +46,30 @@ Future<void> main() async {
   runApp(const ProviderScope(child: IndustryHubApp()));
 }
 
-class IndustryHubApp extends StatelessWidget {
+class IndustryHubApp extends StatefulWidget {
   const IndustryHubApp({super.key});
+
+  @override
+  State<IndustryHubApp> createState() => _IndustryHubAppState();
+}
+
+class _IndustryHubAppState extends State<IndustryHubApp> {
+  late final AuthStateRefreshNotifier _authRefreshNotifier;
+  late final GoRouter _router;
+
+  @override
+  void initState() {
+    super.initState();
+    _authRefreshNotifier = AuthStateRefreshNotifier();
+    _router = createAppRouter(refreshListenable: _authRefreshNotifier);
+  }
+
+  @override
+  void dispose() {
+    _router.dispose();
+    _authRefreshNotifier.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -51,7 +77,7 @@ class IndustryHubApp extends StatelessWidget {
       title: 'IndustryHub',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light,
-      routerConfig: appRouter,
+      routerConfig: _router,
     );
   }
 }

@@ -4,6 +4,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../app/theme.dart';
 import '../../../core/app_state.dart';
@@ -75,6 +76,13 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         profile.businessName.trim().isNotEmpty &&
         profile.sector.trim().isNotEmpty;
     final hasListings = ownListings.isNotEmpty;
+    var emailVerified = false;
+    try {
+      emailVerified =
+          Supabase.instance.client.auth.currentUser?.emailConfirmedAt != null;
+    } catch (_) {
+      // Isolated widget tests can render without an initialised Supabase client.
+    }
 
     return AppShell(
       title: 'My Profile',
@@ -120,7 +128,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                         ),
                       ),
                       StatusChip(
-                        label: hasIdentity ? 'PROFILE READY' : 'PROFILE INCOMPLETE',
+                        label: hasIdentity
+                            ? 'PROFILE READY'
+                            : 'PROFILE INCOMPLETE',
                         color: hasIdentity ? AppColors.green : AppColors.rust,
                       ),
                     ],
@@ -159,10 +169,14 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       ),
                     _ProfileLine(label: 'Account role', value: profile.role),
                     _ProfileLine(
-                      label: 'Review status',
-                      value: hasIdentity
-                          ? 'Ready for business review'
-                          : 'Complete business name and industry sector',
+                      label: 'Email verified',
+                      value: emailVerified ? 'Yes' : 'No',
+                    ),
+                    _ProfileLine(
+                      label: 'Business verified',
+                      value: profile.verified
+                          ? 'Yes — reviewed by IndustryHub'
+                          : 'No — pending independent review',
                     ),
                     const SizedBox(height: 8),
                     OutlinedButton.icon(
@@ -225,13 +239,18 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             label: 'Profile ready for review',
             complete: hasIdentity,
           ),
+          _ChecklistRow(label: 'Email verified', complete: emailVerified),
+          _ChecklistRow(
+            label: 'Business independently verified',
+            complete: profile.verified,
+          ),
           _ChecklistRow(
             label: 'First marketplace listing',
             complete: hasListings,
           ),
           const SizedBox(height: 8),
           const Text(
-            'Business details and listings are stored under your anonymous Supabase workspace. Add a verified identity workflow before treating this readiness status as formal verification.',
+            'Email verification confirms control of the sign-in address. Business verification is a separate IndustryHub review and cannot be granted by editing this profile.',
             style: TextStyle(
               color: AppColors.slate,
               fontSize: 12,
@@ -323,7 +342,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             sector: sector,
             msicCode: selectedSector?.code,
             msicDescription: selectedSector?.name,
-            clearMsic: selectedSector == null && sector != ref.read(appStateProvider).profile.sector,
+            clearMsic:
+                selectedSector == null &&
+                sector != ref.read(appStateProvider).profile.sector,
           );
       if (!mounted) return;
       setState(() => _editing = false);
@@ -347,7 +368,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   }
 
   Future<void> _showAddListing(BuildContext context) async {
-    final profileReady = ref.read(appStateProvider).profile.hasRequiredProfileIdentity;
+    final profileReady = ref
+        .read(appStateProvider)
+        .profile
+        .hasRequiredProfileIdentity;
     if (!profileReady) {
       _startEditing();
       ScaffoldMessenger.of(context).showSnackBar(
@@ -969,10 +993,7 @@ class _ProfileEditor extends StatelessWidget {
                   .map(
                     (item) => DropdownMenuItem(
                       value: item.name,
-                      child: Text(
-                        item.name,
-                        overflow: TextOverflow.ellipsis,
-                      ),
+                      child: Text(item.name, overflow: TextOverflow.ellipsis),
                     ),
                   )
                   .toList(),
@@ -1248,4 +1269,3 @@ class _ProfileAiAdvisor extends StatelessWidget {
     );
   }
 }
-

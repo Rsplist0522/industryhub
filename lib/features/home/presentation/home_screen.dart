@@ -208,7 +208,7 @@ class HomeScreen extends ConsumerWidget {
               eyebrow: 'M3 / RESOURCE PROFILES',
               title: 'My Profile & Listings',
               description:
-                  'Keep your business profile verified and manage the materials you can supply or need.',
+                  'Keep your business profile current, review verification status, and manage the materials you can supply or need.',
               icon: Icons.badge_outlined,
               accent: AppColors.green,
               onTap: () => context.push('/resource-profile'),

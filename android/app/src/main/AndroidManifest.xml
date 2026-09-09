@@ -31,7 +31,8 @@
                 <category android:name="android.intent.category.BROWSABLE"/>
                 <data
                     android:scheme="com.example.industryhub"
-                    android:host="login-callback"/>
+                    android:host="login-callback"
+                    android:pathPrefix="/"/>
             </intent-filter>
         </activity>
         <!-- Don't delete the meta-data below.
