@@ -280,6 +280,7 @@ class _SignupScreenState extends State<SignupScreen> {
       final response = await Supabase.instance.client.auth.signUp(
         email: _email.text.trim(),
         password: _password.text,
+        emailRedirectTo: 'com.example.industryhub://login-callback/',
         data: {
           'business_name': businessName,
           'sector': 'General manufacturing',
