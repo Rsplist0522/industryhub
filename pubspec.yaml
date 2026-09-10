@@ -1,5 +1,5 @@
 name: industryhub
-description: "A new Flutter project."
+description: "A practical operations workspace for Malaysian industrial SMEs."
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev
@@ -39,7 +39,11 @@ dependencies:
   go_router: ^17.1.0
   google_fonts: ^7.0.0
   http: ^1.6.0
+  html: ^0.15.5
   supabase_flutter: ^2.17.2
+  url_launcher: ^6.3.2
+  sqflite: ^2.4.3
+  path: ^1.9.1
 
 dev_dependencies:
   flutter_test:
@@ -64,6 +68,7 @@ flutter:
   uses-material-design: true
   assets:
     - .env
+    - assets/data/skillmatch_role_profiles.json
 
   # To add assets to your application, add an assets section, like this:
   # assets:
