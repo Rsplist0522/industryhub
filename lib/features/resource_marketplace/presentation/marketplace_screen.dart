@@ -246,36 +246,104 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
   }
 
   Future<String?> _askRejectionReason() async {
-    final reason = TextEditingController();
+    const reasons = <String>[
+      'Quantity no longer available',
+      'Price or terms not suitable',
+      'Material requirements do not match',
+      'Accepted another business',
+      'Unable to fulfil at this time',
+      'Other',
+    ];
+
+    final noteController = TextEditingController();
+    String? selectedReason;
+    String? validationMessage;
+
     final result = await showDialog<String?>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Decline this request?'),
-        content: TextField(
-          controller: reason,
-          autofocus: true,
-          minLines: 2,
-          maxLines: 4,
-          maxLength: 240,
-          decoration: const InputDecoration(
-            labelText: 'Reason (optional)',
-            hintText: 'For example: Quantity is no longer available.',
-            alignLabelWithHint: true,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Decline this request?'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Choose a reason so the requester receives a useful explanation.',
+                  style: TextStyle(
+                    color: AppColors.slate,
+                    fontSize: 12,
+                    height: 1.35,
+                  ),
+                ),
+                const SizedBox(height: 14),
+                DropdownButtonFormField<String>(
+                  value: selectedReason,
+                  isExpanded: true,
+                  decoration: InputDecoration(
+                    labelText: 'Decline reason *',
+                    errorText: validationMessage,
+                  ),
+                  items: reasons
+                      .map(
+                        (reason) => DropdownMenuItem(
+                          value: reason,
+                          child: Text(
+                            reason,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: (value) => setDialogState(() {
+                    selectedReason = value;
+                    validationMessage = null;
+                  }),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: noteController,
+                  minLines: 2,
+                  maxLines: 4,
+                  maxLength: 150,
+                  decoration: const InputDecoration(
+                    labelText: 'Additional note (optional)',
+                    hintText: 'Add a short explanation if helpful.',
+                    alignLabelWithHint: true,
+                  ),
+                ),
+              ],
+            ),
           ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () {
+                if (selectedReason == null) {
+                  setDialogState(() {
+                    validationMessage = 'Choose a decline reason.';
+                  });
+                  return;
+                }
+
+                final note = noteController.text.trim();
+                final storedReason = note.isEmpty
+                    ? selectedReason!
+                    : '${selectedReason!}\nAdditional note: $note';
+                Navigator.pop(dialogContext, storedReason);
+              },
+              child: const Text('Decline request'),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(dialogContext, reason.text.trim()),
-            child: const Text('Decline request'),
-          ),
-        ],
       ),
     );
-    reason.dispose();
+
+    noteController.dispose();
     return result;
   }
 
@@ -666,6 +734,10 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
               ),
             ),
           ),
+
+          // Visual separation between Marketplace AI and the official
+          // public/regional dataset section.
+          const SizedBox(height: 24),
 
           DropdownButtonFormField<String>(
             initialValue: _selectedOfficialContextState,
@@ -1511,7 +1583,7 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
                                     ),
                                   if (request.responseNote.isNotEmpty)
                                     Text(
-                                      'Response: ${request.responseNote}',
+                                      'Decline reason: ${request.responseNote}',
                                       style: const TextStyle(
                                         color: AppColors.slate,
                                         fontSize: 12,
@@ -1526,7 +1598,7 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
                                             'CANCELLED' =>
                                               'This request was cancelled.',
                                             'ACCEPTED' =>
-                                              '${request.owner} accepted this request.',
+                                              '${request.owner} accepted this request. The marketplace listing is now matched.',
                                             'REJECTED' =>
                                               '${request.owner} declined this request.',
                                             _ =>
@@ -1554,6 +1626,145 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
                                       ),
                                     ],
                                   ),
+
+                                  // Transaction history is a persistent record,
+                                  // but completed outcomes should still give the
+                                  // user a sensible next action.
+                                  if (request.status == 'ACCEPTED') ...[
+                                    const SizedBox(height: 10),
+                                    Container(
+                                      width: double.infinity,
+                                      padding: const EdgeInsets.all(12),
+                                      decoration: BoxDecoration(
+                                        color: AppColors.green.withValues(
+                                          alpha: 0.07,
+                                        ),
+                                        border: Border.all(
+                                          color: AppColors.green.withValues(
+                                            alpha: 0.22,
+                                          ),
+                                        ),
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                      child: const Row(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Icon(
+                                            Icons.check_circle_outline,
+                                            color: AppColors.green,
+                                            size: 19,
+                                          ),
+                                          SizedBox(width: 9),
+                                          Expanded(
+                                            child: Text(
+                                              'Match confirmed. Review the proposed price and commercial terms before finalising the deal.',
+                                              style: TextStyle(
+                                                color: AppColors.slate,
+                                                fontSize: 12,
+                                                height: 1.35,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    SizedBox(
+                                      width: double.infinity,
+                                      child: FilledButton.icon(
+                                        onPressed: () {
+                                          Navigator.pop(sheetContext);
+                                          context.push('/fair-price', extra: request);
+                                        },
+                                        icon: const Icon(
+                                          Icons.compare_arrows,
+                                          size: 17,
+                                        ),
+                                        label: const Text(
+                                          'Continue with FairPrice',
+                                        ),
+                                      ),
+                                    ),
+                                  ] else if (request.status == 'REJECTED') ...[
+                                    const SizedBox(height: 10),
+                                    Container(
+                                      width: double.infinity,
+                                      padding: const EdgeInsets.all(12),
+                                      decoration: BoxDecoration(
+                                        color: AppColors.rust.withValues(
+                                          alpha: 0.06,
+                                        ),
+                                        border: Border.all(
+                                          color: AppColors.rust.withValues(
+                                            alpha: 0.20,
+                                          ),
+                                        ),
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                      child: Row(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          const Icon(
+                                            Icons.search_outlined,
+                                            color: AppColors.rust,
+                                            size: 19,
+                                          ),
+                                          const SizedBox(width: 9),
+                                          Expanded(
+                                            child: Text(
+                                              request.responseNote.trim().isEmpty
+                                                  ? 'Request declined. This request stays in your history. Return to the marketplace to compare other partial matches.'
+                                                  : 'Request declined. Review the response above, then return to the marketplace to compare other partial matches.',
+                                              style: const TextStyle(
+                                                color: AppColors.slate,
+                                                fontSize: 12,
+                                                height: 1.35,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    SizedBox(
+                                      width: double.infinity,
+                                      child: FilledButton.icon(
+                                        onPressed: () {
+                                          // Transaction history is already opened
+                                          // on top of the Marketplace screen, so
+                                          // closing the sheet returns directly to
+                                          // the marketplace results.
+                                          Navigator.pop(sheetContext);
+                                        },
+                                        icon: const Icon(
+                                          Icons.search_outlined,
+                                          size: 17,
+                                        ),
+                                        label: const Text(
+                                          'Find another marketplace match',
+                                        ),
+                                      ),
+                                    ),
+                                  ] else if (request.status == 'CANCELLED') ...[
+                                    const SizedBox(height: 10),
+                                    SizedBox(
+                                      width: double.infinity,
+                                      child: OutlinedButton.icon(
+                                        onPressed: () {
+                                          Navigator.pop(sheetContext);
+                                        },
+                                        icon: const Icon(
+                                          Icons.storefront_outlined,
+                                          size: 17,
+                                        ),
+                                        label: const Text(
+                                          'Return to marketplace listings',
+                                        ),
+                                      ),
+                                    ),
+                                  ],
                                 ],
                               ),
                             ),
@@ -1729,7 +1940,7 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
                                       Padding(
                                         padding: const EdgeInsets.only(top: 4),
                                         child: Text(
-                                          'Response: ${request.responseNote}',
+                                          'Decline reason: ${request.responseNote}',
                                           style: const TextStyle(
                                             color: AppColors.slate,
                                             fontSize: 12,

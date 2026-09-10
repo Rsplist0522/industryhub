@@ -416,7 +416,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
               if (request.responseNote.trim().isNotEmpty)
                 _NotificationDetailLine(
-                  label: 'Response',
+                  label: request.status == 'REJECTED'
+                      ? 'Decline reason'
+                      : 'Response',
                   value: request.responseNote,
                 ),
 
@@ -480,87 +482,41 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 ),
               ] else if (requesterAccepted) ...[
                 _NextStepCard(
-                  icon:
-                      Icons.check_circle_outline,
+                  icon: Icons.check_circle_outline,
                   title: 'Match confirmed',
                   description:
-                      '${request.owner} accepted your deal request. The listing is now matched, so the next useful step is to review the proposed price and business terms.',
-                ),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Expanded(
-                      child: FilledButton.icon(
-                        onPressed: () {
-                          Navigator.pop(
-                            sheetContext,
-                          );
-                          context.push(
-                            '/fair-price',
-                          );
-                        },
-                        icon: const Icon(
-                          Icons.compare_arrows,
-                        ),
-                        label: const Text(
-                          'Open FairPrice',
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child:
-                          OutlinedButton.icon(
-                        onPressed: () {
-                          Navigator.pop(
-                            sheetContext,
-                          );
-                          context.push(
-                            '/marketplace',
-                          );
-                        },
-                        icon: const Icon(
-                          Icons.storefront_outlined,
-                        ),
-                        label: const Text(
-                          'Marketplace',
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ] else if (requesterRejected) ...[
-                _NextStepCard(
-                  icon:
-                      Icons.search_outlined,
-                  title:
-                      'Continue searching',
-                  description: request
-                          .responseNote
-                          .trim()
-                          .isEmpty
-                      ? '${request.owner} declined this request. You can return to the marketplace and compare other partial matches.'
-                      : '${request.owner} declined this request. Review the response above, then return to the marketplace and compare other partial matches.',
+                      '${request.owner} accepted your deal request. The listing is now matched. Review the proposed price and commercial terms before finalising the deal.',
                 ),
                 const SizedBox(height: 12),
                 SizedBox(
                   width: double.infinity,
-                  child:
-                      FilledButton.icon(
+                  child: FilledButton.icon(
                     onPressed: () {
-                      Navigator.pop(
-                        sheetContext,
-                      );
-                      context.push(
-                        '/marketplace',
-                      );
+                      Navigator.pop(sheetContext);
+                      context.push('/fair-price', extra: request);
                     },
-                    icon: const Icon(
-                      Icons.search_outlined,
-                    ),
-                    label: const Text(
-                      'Find another listing',
-                    ),
+                    icon: const Icon(Icons.compare_arrows),
+                    label: const Text('Continue with FairPrice'),
+                  ),
+                ),
+              ] else if (requesterRejected) ...[
+                _NextStepCard(
+                  icon: Icons.search_outlined,
+                  title: 'Request declined',
+                  description: request.responseNote.trim().isEmpty
+                      ? '${request.owner} declined this request. The request stays in your history, and you can now compare other marketplace matches.'
+                      : '${request.owner} declined this request. Review the response above, then compare other marketplace matches.',
+                ),
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.icon(
+                    onPressed: () {
+                      Navigator.pop(sheetContext);
+                      context.push('/marketplace');
+                    },
+                    icon: const Icon(Icons.search_outlined),
+                    label: const Text('Find another marketplace match'),
                   ),
                 ),
               ] else ...[
@@ -593,46 +549,104 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 
   Future<String?> _askRejectionReason() async {
-    final controller = TextEditingController();
+    const reasons = <String>[
+      'Quantity no longer available',
+      'Price or terms not suitable',
+      'Material requirements do not match',
+      'Accepted another business',
+      'Unable to fulfil at this time',
+      'Other',
+    ];
+
+    final noteController = TextEditingController();
+    String? selectedReason;
+    String? validationMessage;
 
     final result = await showDialog<String?>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title:
-            const Text('Decline this request?'),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          minLines: 2,
-          maxLines: 4,
-          maxLength: 240,
-          decoration: const InputDecoration(
-            labelText: 'Reason (optional)',
-            hintText:
-                'For example: Quantity is no longer available.',
-            alignLabelWithHint: true,
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () =>
-                Navigator.pop(dialogContext),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () =>
-                Navigator.pop(
-              dialogContext,
-              controller.text.trim(),
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Decline this request?'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Choose a reason so the other business receives a useful explanation.',
+                  style: TextStyle(
+                    color: AppColors.slate,
+                    fontSize: 12,
+                    height: 1.35,
+                  ),
+                ),
+                const SizedBox(height: 14),
+                DropdownButtonFormField<String>(
+                  value: selectedReason,
+                  isExpanded: true,
+                  decoration: InputDecoration(
+                    labelText: 'Decline reason *',
+                    errorText: validationMessage,
+                  ),
+                  items: reasons
+                      .map(
+                        (reason) => DropdownMenuItem(
+                          value: reason,
+                          child: Text(
+                            reason,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: (value) => setDialogState(() {
+                    selectedReason = value;
+                    validationMessage = null;
+                  }),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: noteController,
+                  minLines: 2,
+                  maxLines: 4,
+                  maxLength: 150,
+                  decoration: const InputDecoration(
+                    labelText: 'Additional note (optional)',
+                    hintText: 'Add a short explanation if helpful.',
+                    alignLabelWithHint: true,
+                  ),
+                ),
+              ],
             ),
-            child:
-                const Text('Decline request'),
           ),
-        ],
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () {
+                if (selectedReason == null) {
+                  setDialogState(() {
+                    validationMessage = 'Choose a decline reason.';
+                  });
+                  return;
+                }
+
+                final note = noteController.text.trim();
+                final storedReason = note.isEmpty
+                    ? selectedReason!
+                    : '${selectedReason!}\nAdditional note: $note';
+                Navigator.pop(dialogContext, storedReason);
+              },
+              child: const Text('Decline request'),
+            ),
+          ],
+        ),
       ),
     );
 
-    controller.dispose();
+    noteController.dispose();
     return result;
   }
 

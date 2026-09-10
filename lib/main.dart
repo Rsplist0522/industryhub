@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'app/router.dart';
@@ -39,11 +40,18 @@ Future<void> main() async {
     ),
   );
 
-  runApp(const ProviderScope(child: IndustryHubApp()));
+  final appRouter = createAppRouter();
+  runApp(
+    ProviderScope(
+      child: IndustryHubApp(router: appRouter),
+    ),
+  );
 }
 
 class IndustryHubApp extends StatelessWidget {
-  const IndustryHubApp({super.key});
+  const IndustryHubApp({required this.router, super.key});
+
+  final GoRouter router;
 
   @override
   Widget build(BuildContext context) {
@@ -51,7 +59,7 @@ class IndustryHubApp extends StatelessWidget {
       title: 'IndustryHub',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light,
-      routerConfig: appRouter,
+      routerConfig: router,
     );
   }
 }
