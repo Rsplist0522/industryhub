@@ -354,6 +354,13 @@ class _AppShellState extends State<AppShell> {
                       onTap: () => _navigateTo(item.route),
                     );
                   }),
+                                    const Divider(),
+                                    ListTile(
+                                      leading: const Icon(Icons.account_circle_outlined),
+                                      title: const Text('Account'),
+                                      selected: currentRoute == '/user-profile',
+                                      onTap: () => _navigateTo('/user-profile'),
+                                    ),
                 ],
               ),
             ),
