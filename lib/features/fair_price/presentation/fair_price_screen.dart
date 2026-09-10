@@ -2,12 +2,14 @@
 // Design intent: a transparent negotiation simulator with explicit
 // inputs, explainable reference adjustments, and no claim of live market pricing.
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../app/theme.dart';
 import '../../../core/app_state.dart';
+import '../../../core/local_database.dart';
 import '../../../core/services.dart';
 import '../../../core/widgets.dart';
 import '../../../core/validators.dart';
@@ -115,6 +117,51 @@ class _FairPriceScreenState extends ConsumerState<FairPriceScreen> {
   List<LocalListingPrice> _localListingPrices = const [];
   bool _isLoadingMarketSignals = true;
 
+  Future<void> _saveFairPricePreferences() async {
+  if (!_supportsLocalSqlite) {
+    return;
+  }
+
+  await Future.wait([
+    LocalDatabase.savePreference(
+      'fair_price_material',
+      _selectedMaterial,
+    ),
+
+    LocalDatabase.savePreference(
+      'fair_price_product',
+      _product.text.trim(),
+    ),
+
+    LocalDatabase.savePreference(
+      'fair_price_quantity',
+      _quantity.text.trim(),
+    ),
+
+    LocalDatabase.savePreference(
+      'fair_price_proposed_price',
+      _price.text.trim(),
+    ),
+
+    LocalDatabase.savePreference(
+      'fair_price_condition',
+      _condition,
+    ),
+
+    LocalDatabase.savePreference(
+      'fair_price_collection',
+      _collection,
+    ),
+  ]);
+}
+
+  bool _isLoadingPreferences = true; 
+
+  bool get _supportsLocalSqlite =>
+      defaultTargetPlatform == TargetPlatform.android ||
+      defaultTargetPlatform == TargetPlatform.iOS ||
+      defaultTargetPlatform == TargetPlatform.macOS;
+
   static const _materials = [
     'Aluminium',
     'Copper',
@@ -150,8 +197,120 @@ class _FairPriceScreenState extends ConsumerState<FairPriceScreen> {
   @override
   void initState() {
     super.initState();
-    Future<void>.microtask(() => _loadMarketSignals(_product.text.trim()));
+    
+    Future<void>.microtask(
+      _initialiseFairPrice,
+    );
   }
+
+  Future<void> _initialiseFairPrice() async {
+  await _loadSavedPreferences();
+
+  if (!mounted) return;
+
+  await _loadMarketSignals(
+    _product.text.trim(),
+  );
+}
+
+Future<void> _loadSavedPreferences() async {
+  if (!_supportsLocalSqlite) {
+    if (mounted) {
+      setState(() {
+        _isLoadingPreferences = false;
+      });
+    }
+    return;
+  }
+
+  try {
+    final preferences =
+        await LocalDatabase.getAllPreferences();
+
+    if (!mounted) return;
+
+    final savedMaterial =
+        preferences['fair_price_material'];
+
+    final savedProduct =
+        preferences['fair_price_product'];
+
+    final savedCondition =
+        preferences['fair_price_condition'];
+
+    final savedCollection =
+        preferences['fair_price_collection'];
+
+    final savedQuantity =
+        preferences['fair_price_quantity'];
+
+    final savedPrice =
+        preferences['fair_price_proposed_price'];
+
+    /*
+      Material categories may also come from live marketplace
+      listings, so include those when validating the saved value.
+    */
+    final availableMaterials = <String>{
+      ..._materials,
+      ...ref
+          .read(appStateProvider)
+          .listings
+          .map((listing) => listing.material.trim())
+          .where((material) => material.isNotEmpty),
+    };
+
+    setState(() {
+      if (savedMaterial != null &&
+          availableMaterials.contains(savedMaterial)) {
+        _selectedMaterial = savedMaterial;
+      }
+
+      if (savedProduct != null &&
+          savedProduct.trim().isNotEmpty) {
+        _product.text = savedProduct;
+      }
+
+      if (savedCondition != null &&
+          _conditions.contains(savedCondition)) {
+        _condition = savedCondition;
+      }
+
+      if (savedCollection != null &&
+          _collectionTerms.contains(savedCollection)) {
+        _collection = savedCollection;
+      }
+
+      final parsedQuantity =
+          double.tryParse(savedQuantity ?? '');
+
+      if (parsedQuantity != null &&
+          parsedQuantity > 0) {
+        _quantity.text = savedQuantity!;
+      }
+
+      final parsedPrice =
+          double.tryParse(savedPrice ?? '');
+
+      if (parsedPrice != null &&
+          parsedPrice > 0) {
+        _price.text = savedPrice!;
+      }
+
+      _isLoadingPreferences = false;
+    });
+  } catch (error) {
+    debugPrint(
+      'FairPrice preferences could not be loaded: $error',
+    );
+
+    if (!mounted) return;
+
+    setState(() {
+      _isLoadingPreferences = false;
+    });
+  }
+}
 
   Future<void> _loadMarketSignals(String product) async {
     if (!mounted) return;
@@ -211,9 +370,26 @@ class _FairPriceScreenState extends ConsumerState<FairPriceScreen> {
     }
 
     final product = _product.text.trim();
-    final quantity = double.parse(_quantity.text.trim());
-    final proposedPrice = double.parse(_price.text.trim());
-    setState(() => _isRunning = true);
+
+    final quantity =
+      double.parse(_quantity.text.trim());
+
+    final proposedPrice =
+      double.parse(_price.text.trim());
+
+try {
+  await _saveFairPricePreferences();
+} catch (error) {
+  debugPrint(
+    'FairPrice preferences could not be saved: $error',
+  );
+}
+
+if (!mounted) return;
+
+setState(() {
+  _isRunning = true;
+}); 
     await _loadMarketSignals(product);
     if (!mounted) return;
     final result = _calculateResult(
@@ -529,7 +705,7 @@ Evidence library:
       setState(() => _isSaved = true);
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Price recommendation saved to your profile.'),
+          content: Text('Recommendation saved locally and to your profile.'),
         ),
       );
     } catch (_) {
@@ -546,23 +722,77 @@ Evidence library:
     }
   }
 
-  void _resetScenario() {
-    if (_isRunning) return;
-    _selectedMaterial = 'Aluminium';
-    _product.text = 'Aluminium machining offcuts';
-    _price.text = '48';
-    _quantity.text = '500';
-    setState(() {
-      _condition = 'Sorted & dry';
-      _collection = 'Buyer collects';
-      _round = 0;
-      _isSaved = false;
-      _result = null;
-      _aiAdvice = null;
-      _chatMessages.clear();
-      _messages.clear();
-    });
+  Future<void> _resetScenario() async {
+  if (_isRunning || _isChatThinking) {
+    return;
   }
+
+  if (_supportsLocalSqlite) {
+    try {
+      await Future.wait([
+        LocalDatabase.deletePreference(
+          'fair_price_material',
+        ),
+        LocalDatabase.deletePreference(
+          'fair_price_product',
+        ),
+        LocalDatabase.deletePreference(
+          'fair_price_quantity',
+        ),
+        LocalDatabase.deletePreference(
+          'fair_price_proposed_price',
+        ),
+        LocalDatabase.deletePreference(
+          'fair_price_condition',
+        ),
+        LocalDatabase.deletePreference(
+          'fair_price_collection',
+        ),
+      ]);
+    } catch (error) {
+      debugPrint(
+        'FairPrice saved scenario could not be cleared: $error',
+      );
+    }
+  }
+
+  if (!mounted) return;
+
+  _product.text =
+      'Aluminium machining offcuts';
+
+  _price.text = '48';
+  _quantity.text = '500';
+
+  setState(() {
+    _selectedMaterial = 'Aluminium';
+    _condition = 'Sorted & dry';
+    _collection = 'Buyer collects';
+
+    _round = 0;
+    _isSaved = false;
+    _result = null;
+    _aiAdvice = null;
+
+    _chatMessages.clear();
+    _messages.clear();
+  });
+
+  await _loadMarketSignals(
+    _product.text.trim(),
+  );
+
+  if (!mounted) return;
+
+  ScaffoldMessenger.of(context).showSnackBar(
+    const SnackBar(
+      content: Text(
+        'FairPrice scenario reset and saved preferences cleared.',
+      ),
+      behavior: SnackBarBehavior.floating,
+    ),
+  );
+}
 
   String? _requiredText(String? value) =>
       validateRequiredText(value, label: 'a material or product name');
@@ -612,6 +842,9 @@ Evidence library:
             child: Column(
               children: [
                 DropdownButtonFormField<String>(
+                  key: ValueKey(
+                    'material-$_selectedMaterial',
+                  ),
                   initialValue: _selectedMaterial,
                   decoration: const InputDecoration(
                     labelText: 'Choose a material category',
@@ -684,6 +917,9 @@ Evidence library:
                   children: [
                     Expanded(
                       child: DropdownButtonFormField<String>(
+                        key: ValueKey(
+                          'condition-$_condition',
+                        ),
                         initialValue: _condition,
                         isExpanded: true,
                         decoration: const InputDecoration(
@@ -707,6 +943,9 @@ Evidence library:
                     const SizedBox(width: 12),
                     Expanded(
                       child: DropdownButtonFormField<String>(
+                        key: ValueKey(
+                          'collection-$_collection',
+                        ),
                         initialValue: _collection,
                         isExpanded: true,
                         decoration: const InputDecoration(
@@ -733,10 +972,15 @@ Evidence library:
                 SizedBox(
                   width: double.infinity,
                   child: FilledButton.icon(
-                    onPressed: _isRunning ? null : _start,
+                    onPressed:
+                    (_isRunning || _isLoadingPreferences)
+                    ? null 
+                    : _start,
                     icon: const Icon(Icons.compare_arrows),
                     label: Text(
-                      _isRunning
+                      _isLoadingPreferences
+                        ? 'Restoring saved scenario…'
+                        : _isRunning
                           ? 'Loading live market evidence…'
                           : 'Prepare negotiation',
                     ),
@@ -1191,6 +1435,14 @@ class _PriceResult extends StatelessWidget {
                 floor: result.floor,
                 target: result.target,
                 ceiling: result.ceiling,
+              ),
+              const SizedBox(height: 12),
+              Text(
+                'Estimated target value: RM ${(result.target * result.quantity).toStringAsFixed(2)}',
+                style: TextStyle(
+                  color: AppColors.white.withValues(alpha: 0.86),
+                  fontWeight: FontWeight.w700,
+                ),
               ),
             ] else ...[
               Text(

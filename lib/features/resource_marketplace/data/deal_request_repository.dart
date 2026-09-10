@@ -1,6 +1,4 @@
-// Supabase persistence for M4 Marketplace outgoing deal requests.
-// The public Marketplace UI stays unchanged and imports this file as
-// deal_request_repository.dart after replacement.
+// Supabase persistence for M4 Marketplace deal requests and notifications.
 
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -21,6 +19,8 @@ class DealRequestRecord {
     required this.responseNote,
     required this.status,
     required this.sentAt,
+    this.requesterReadAt,
+    this.ownerReadAt,
   });
 
   final String id;
@@ -29,8 +29,6 @@ class DealRequestRecord {
   final String listingOwnerId;
   final String material;
   final String owner;
-  // Snapshot of the requesting business's name, so the listing owner has
-  // something to show besides a bare user id when reviewing a request.
   final String requesterName;
   final String location;
   final String quantity;
@@ -38,6 +36,8 @@ class DealRequestRecord {
   final String responseNote;
   final String status;
   final DateTime sentAt;
+  final DateTime? requesterReadAt;
+  final DateTime? ownerReadAt;
 
   factory DealRequestRecord.fromSupabase(Map<String, dynamic> data) =>
       DealRequestRecord(
@@ -57,9 +57,18 @@ class DealRequestRecord {
         sentAt:
             DateTime.tryParse(data['created_at'] as String? ?? '') ??
             DateTime.now(),
+        requesterReadAt: DateTime.tryParse(
+          data['requester_read_at'] as String? ?? '',
+        ),
+        ownerReadAt: DateTime.tryParse(data['owner_read_at'] as String? ?? ''),
       );
 
-  DealRequestRecord copyWith({String? status, String? responseNote}) => DealRequestRecord(
+  DealRequestRecord copyWith({
+    String? status,
+    String? responseNote,
+    DateTime? requesterReadAt,
+    DateTime? ownerReadAt,
+  }) => DealRequestRecord(
     id: id,
     listingId: listingId,
     requesterId: requesterId,
@@ -73,6 +82,8 @@ class DealRequestRecord {
     responseNote: responseNote ?? this.responseNote,
     status: status ?? this.status,
     sentAt: sentAt,
+    requesterReadAt: requesterReadAt ?? this.requesterReadAt,
+    ownerReadAt: ownerReadAt ?? this.ownerReadAt,
   );
 }
 
@@ -133,24 +144,6 @@ class DealRequestRepository {
         .toList();
   }
 
-  Future<void> cancelRequest(String requestId) async {
-    final user = _supabase.auth.currentUser;
-    if (user == null) {
-      throw StateError('Sign in before cancelling a deal request.');
-    }
-
-    try {
-      await _supabase.rpc(
-        'cancel_deal_request',
-        params: {'p_request_id': requestId},
-      );
-    } on PostgrestException catch (error) {
-      throw StateError(error.message);
-    }
-  }
-
-  /// Requests sent TO listings this user owns, i.e. the ones only the
-  /// listing owner is allowed to accept or reject.
   Future<List<DealRequestRecord>> fetchIncomingRequests() async {
     final user = _supabase.auth.currentUser;
     if (user == null) return const [];
@@ -169,9 +162,40 @@ class DealRequestRepository {
         .toList();
   }
 
-  /// Accept or reject a request sent to one of the current user's listings.
-  /// The database RPC verifies the signed-in user is the listing owner and
-  /// performs the status transition atomically.
+  Future<List<DealRequestRecord>> fetchRelevantRequests() async {
+    final user = _supabase.auth.currentUser;
+    if (user == null) return const [];
+
+    final rows = await _supabase
+        .from('deal_requests')
+        .select()
+        .or('requester_id.eq.${user.id},listing_owner_id.eq.${user.id}')
+        .order('created_at', ascending: false);
+    return (rows as List)
+        .map(
+          (row) => DealRequestRecord.fromSupabase(
+            Map<String, dynamic>.from(row as Map),
+          ),
+        )
+        .toList();
+  }
+
+  Future<void> cancelRequest(String requestId) async {
+    final user = _supabase.auth.currentUser;
+    if (user == null) {
+      throw StateError('Sign in before cancelling a deal request.');
+    }
+
+    try {
+      await _supabase.rpc(
+        'cancel_deal_request',
+        params: {'p_request_id': requestId},
+      );
+    } on PostgrestException catch (error) {
+      throw StateError(error.message);
+    }
+  }
+
   Future<void> respondToRequest(
     String requestId, {
     required bool accept,
@@ -196,9 +220,28 @@ class DealRequestRepository {
     }
   }
 
-  /// Live view of this user's outgoing requests. Used instead of a one-shot
-  /// fetch so the status updates on screen the moment the other business
-  /// accepts, rejects, or the record otherwise changes — no manual refresh.
+  Future<void> markOwnerNotificationRead(String requestId) async {
+    try {
+      await _supabase.rpc(
+        'mark_deal_request_owner_read',
+        params: {'p_request_id': requestId},
+      );
+    } on PostgrestException catch (error) {
+      throw StateError(error.message);
+    }
+  }
+
+  Future<void> markRequesterNotificationRead(String requestId) async {
+    try {
+      await _supabase.rpc(
+        'mark_deal_request_requester_read',
+        params: {'p_request_id': requestId},
+      );
+    } on PostgrestException catch (error) {
+      throw StateError(error.message);
+    }
+  }
+
   Stream<List<DealRequestRecord>> watchOutgoingRequests() {
     final user = _supabase.auth.currentUser;
     if (user == null) return Stream<List<DealRequestRecord>>.value(const []);
@@ -210,15 +253,15 @@ class DealRequestRepository {
         .order('created_at', ascending: false)
         .map(
           (rows) => rows
-              .map((row) => DealRequestRecord.fromSupabase(
-                    Map<String, dynamic>.from(row),
-                  ))
+              .map(
+                (row) => DealRequestRecord.fromSupabase(
+                  Map<String, dynamic>.from(row),
+                ),
+              )
               .toList(),
         );
   }
 
-  /// Live view of requests sent to this user's listings, so a new incoming
-  /// request (or a cancellation) shows up without a manual refresh.
   Stream<List<DealRequestRecord>> watchIncomingRequests() {
     final user = _supabase.auth.currentUser;
     if (user == null) return Stream<List<DealRequestRecord>>.value(const []);
@@ -230,11 +273,34 @@ class DealRequestRepository {
         .order('created_at', ascending: false)
         .map(
           (rows) => rows
-              .map((row) => DealRequestRecord.fromSupabase(
-                    Map<String, dynamic>.from(row),
-                  ))
+              .map(
+                (row) => DealRequestRecord.fromSupabase(
+                  Map<String, dynamic>.from(row),
+                ),
+              )
+              .toList(),
+        );
+  }
+
+  Stream<List<DealRequestRecord>> watchRelevantRequests() {
+    final user = _supabase.auth.currentUser;
+    if (user == null) return Stream<List<DealRequestRecord>>.value(const []);
+
+    // RLS already limits rows to requests where the signed-in user is either
+    // the requester or the listing owner, so one realtime stream is enough for
+    // the global notification centre.
+    return _supabase
+        .from('deal_requests')
+        .stream(primaryKey: ['id'])
+        .order('created_at', ascending: false)
+        .map(
+          (rows) => rows
+              .map(
+                (row) => DealRequestRecord.fromSupabase(
+                  Map<String, dynamic>.from(row),
+                ),
+              )
               .toList(),
         );
   }
 }
-
