@@ -68,9 +68,10 @@ void main() {
           isWeb: false,
           baseUri: Uri.parse('file:///'),
           isMobile: true,
-          configuredWebRedirect: 'http://localhost:49311/auth/confirmed',
+          configuredWebRedirect:
+              'https://rsplist0522.github.io/industryhub-confirmation/',
         ),
-        'http://localhost:49311/auth/confirmed',
+        'https://rsplist0522.github.io/industryhub-confirmation/',
       );
     });
 

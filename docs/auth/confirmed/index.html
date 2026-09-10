@@ -1,0 +1,295 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light">
+    <meta name="theme-color" content="#16324f">
+    <meta
+      name="description"
+      content="IndustryHub email verification confirmation."
+    >
+    <title>Email verified | IndustryHub</title>
+    <style>
+      :root {
+        --navy: #16324f;
+        --ink: #1b1f23;
+        --slate: #5b6b7a;
+        --chalk: #f5f4f0;
+        --green: #3a7d5c;
+        --white: #ffffff;
+        --line: rgba(91, 107, 122, 0.2);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html {
+        min-width: 320px;
+        min-height: 100%;
+        background: var(--chalk);
+      }
+
+      body {
+        min-height: 100vh;
+        margin: 0;
+        color: var(--ink);
+        font-family: "IBM Plex Sans", "Segoe UI", Arial, sans-serif;
+        background-color: var(--chalk);
+        background-image:
+          linear-gradient(rgba(22, 50, 79, 0.035) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(22, 50, 79, 0.035) 1px, transparent 1px);
+        background-size: 32px 32px;
+      }
+
+      .page-shell {
+        display: grid;
+        min-height: 100vh;
+        grid-template-rows: auto 1fr auto;
+      }
+
+      .site-header,
+      .site-footer {
+        width: min(100% - 40px, 1120px);
+        margin-inline: auto;
+      }
+
+      .site-header {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding-block: 28px;
+        color: var(--navy);
+      }
+
+      .brand-mark {
+        display: grid;
+        width: 34px;
+        height: 34px;
+        place-items: center;
+        border-radius: 7px;
+        background: var(--navy);
+        color: var(--white);
+      }
+
+      .brand-mark svg {
+        width: 20px;
+        height: 20px;
+      }
+
+      .brand-name {
+        font-family: "Arial Narrow", "Segoe UI", Arial, sans-serif;
+        font-size: 1rem;
+        font-weight: 800;
+        letter-spacing: 0.09em;
+      }
+
+      main {
+        display: grid;
+        place-items: center;
+        padding: 32px 20px 72px;
+      }
+
+      .confirmation-card {
+        position: relative;
+        width: min(100%, 620px);
+        overflow: hidden;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        background: rgba(255, 255, 255, 0.94);
+        box-shadow: 0 24px 70px rgba(22, 50, 79, 0.11);
+      }
+
+      .confirmation-card::before {
+        position: absolute;
+        inset: 0 0 auto;
+        height: 5px;
+        background: var(--green);
+        content: "";
+      }
+
+      .card-content {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: 58px 54px 50px;
+        text-align: center;
+      }
+
+      .eyebrow {
+        margin: 0 0 24px;
+        color: var(--slate);
+        font-size: 0.72rem;
+        font-weight: 800;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+      }
+
+      .success-icon {
+        display: grid;
+        width: 84px;
+        height: 84px;
+        margin-bottom: 28px;
+        place-items: center;
+        border: 1px solid rgba(58, 125, 92, 0.24);
+        border-radius: 18px;
+        background: rgba(58, 125, 92, 0.1);
+        color: var(--green);
+      }
+
+      .success-icon svg {
+        width: 50px;
+        height: 50px;
+      }
+
+      h1 {
+        max-width: 470px;
+        margin: 0;
+        color: var(--navy);
+        font-family: "Arial Narrow", "Segoe UI", Arial, sans-serif;
+        font-size: clamp(1.8rem, 5vw, 2.35rem);
+        font-weight: 800;
+        line-height: 1.12;
+        letter-spacing: -0.025em;
+      }
+
+      .lead {
+        margin: 18px 0 0;
+        color: var(--ink);
+        font-size: 1.05rem;
+        font-weight: 600;
+        line-height: 1.6;
+      }
+
+      .supporting-copy {
+        max-width: 430px;
+        margin: 8px 0 0;
+        color: var(--slate);
+        font-size: 0.98rem;
+        line-height: 1.65;
+      }
+
+      .status {
+        display: inline-flex;
+        align-items: center;
+        gap: 9px;
+        margin-top: 30px;
+        padding: 9px 13px;
+        border: 1px solid rgba(58, 125, 92, 0.22);
+        border-radius: 6px;
+        background: rgba(58, 125, 92, 0.07);
+        color: var(--green);
+        font-size: 0.78rem;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+      }
+
+      .status-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--green);
+        box-shadow: 0 0 0 4px rgba(58, 125, 92, 0.12);
+      }
+
+      .site-footer {
+        padding-block: 0 28px;
+        color: var(--slate);
+        font-size: 0.75rem;
+        letter-spacing: 0.05em;
+        text-align: center;
+      }
+
+      @media (max-width: 520px) {
+        .site-header {
+          padding-block: 20px;
+        }
+
+        main {
+          align-items: start;
+          padding-top: 18px;
+        }
+
+        .card-content {
+          padding: 46px 24px 40px;
+        }
+
+        .success-icon {
+          width: 74px;
+          height: 74px;
+          border-radius: 16px;
+        }
+
+        .success-icon svg {
+          width: 44px;
+          height: 44px;
+        }
+      }
+
+      @media (prefers-reduced-motion: no-preference) {
+        .confirmation-card {
+          animation: settle 450ms ease-out both;
+        }
+
+        @keyframes settle {
+          from {
+            opacity: 0;
+            transform: translateY(10px);
+          }
+
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="page-shell">
+      <header class="site-header" aria-label="IndustryHub">
+        <span class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 19V9l8-4 8 4v10"></path>
+            <path d="M8 19v-6h8v6"></path>
+            <path d="M3 19h18"></path>
+          </svg>
+        </span>
+        <span class="brand-name">INDUSTRYHUB</span>
+      </header>
+
+      <main>
+        <section class="confirmation-card" aria-labelledby="confirmation-title">
+          <div class="card-content">
+            <p class="eyebrow">IndustryHub / Account access</p>
+
+            <div class="success-icon" aria-hidden="true">
+              <svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="7" y="13" width="42" height="32" rx="4"></rect>
+                <path d="m9 17 19 15 19-15"></path>
+                <circle cx="48" cy="46" r="12" fill="#ffffff"></circle>
+                <path d="m42.5 46 4 4 7.5-8"></path>
+              </svg>
+            </div>
+
+            <h1 id="confirmation-title">Email verified successfully.</h1>
+            <p class="lead">Your IndustryHub account is now active.</p>
+            <p class="supporting-copy">
+              You may return to the IndustryHub app and sign in.
+            </p>
+
+            <div class="status" role="status">
+              <span class="status-dot" aria-hidden="true"></span>
+              Confirmation complete
+            </div>
+          </div>
+        </section>
+      </main>
+
+      <footer class="site-footer">
+        Practical intelligence for Malaysian SMEs
+      </footer>
+    </div>
+  </body>
+</html>
