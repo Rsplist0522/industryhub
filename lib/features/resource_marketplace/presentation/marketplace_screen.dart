@@ -246,36 +246,104 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
   }
 
   Future<String?> _askRejectionReason() async {
-    final reason = TextEditingController();
+    const reasons = <String>[
+      'Quantity no longer available',
+      'Price or terms not suitable',
+      'Material requirements do not match',
+      'Accepted another business',
+      'Unable to fulfil at this time',
+      'Other',
+    ];
+
+    final noteController = TextEditingController();
+    String? selectedReason;
+    String? validationMessage;
+
     final result = await showDialog<String?>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Decline this request?'),
-        content: TextField(
-          controller: reason,
-          autofocus: true,
-          minLines: 2,
-          maxLines: 4,
-          maxLength: 240,
-          decoration: const InputDecoration(
-            labelText: 'Reason (optional)',
-            hintText: 'For example: Quantity is no longer available.',
-            alignLabelWithHint: true,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Decline this request?'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Choose a reason so the requester receives a useful explanation.',
+                  style: TextStyle(
+                    color: AppColors.slate,
+                    fontSize: 12,
+                    height: 1.35,
+                  ),
+                ),
+                const SizedBox(height: 14),
+                DropdownButtonFormField<String>(
+                  value: selectedReason,
+                  isExpanded: true,
+                  decoration: InputDecoration(
+                    labelText: 'Decline reason *',
+                    errorText: validationMessage,
+                  ),
+                  items: reasons
+                      .map(
+                        (reason) => DropdownMenuItem(
+                          value: reason,
+                          child: Text(
+                            reason,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: (value) => setDialogState(() {
+                    selectedReason = value;
+                    validationMessage = null;
+                  }),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: noteController,
+                  minLines: 2,
+                  maxLines: 4,
+                  maxLength: 150,
+                  decoration: const InputDecoration(
+                    labelText: 'Additional note (optional)',
+                    hintText: 'Add a short explanation if helpful.',
+                    alignLabelWithHint: true,
+                  ),
+                ),
+              ],
+            ),
           ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () {
+                if (selectedReason == null) {
+                  setDialogState(() {
+                    validationMessage = 'Choose a decline reason.';
+                  });
+                  return;
+                }
+
+                final note = noteController.text.trim();
+                final storedReason = note.isEmpty
+                    ? selectedReason!
+                    : '${selectedReason!}\nAdditional note: $note';
+                Navigator.pop(dialogContext, storedReason);
+              },
+              child: const Text('Decline request'),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(dialogContext, reason.text.trim()),
-            child: const Text('Decline request'),
-          ),
-        ],
       ),
     );
-    reason.dispose();
+
+    noteController.dispose();
     return result;
   }
 
@@ -403,6 +471,32 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
     }
   }
 
+  Future<void> _refreshMarketplace() async {
+    try {
+      await ref.read(appStateProvider.notifier).refreshSupabaseData();
+
+      if (!mounted) return;
+
+      // Reconnect the live request streams so the request inbox/history is
+      // refreshed together with the marketplace listings.
+      _subscribeToRequests();
+
+      await _loadIndustrialContext(
+        marketplaceLocation: _location ?? _selectedOfficialContextState,
+      );
+    } catch (error) {
+      if (!mounted) return;
+      debugPrint('Marketplace pull-to-refresh failed: $error');
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Marketplace could not be refreshed. Check your connection and try again.',
+          ),
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final sourceListings = ref.watch(appStateProvider).listings;
@@ -432,13 +526,17 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
           ],
           icon: const Icon(Icons.sort_outlined),
         ),
+        // Keep this in M4: it is a pending-work counter, not the global
+        // unread-notification counter shown on the Home dashboard.
         IconButton(
           icon: Badge.count(
             count: _pendingIncomingCount,
             isLabelVisible: _pendingIncomingCount > 0,
+            backgroundColor: AppColors.amber,
+            textColor: AppColors.white,
             child: const Icon(Icons.inbox_outlined),
           ),
-          tooltip: 'Review requests sent to your listings',
+          tooltip: 'Pending deal requests for your listings',
           onPressed: _showIncomingRequests,
         ),
         IconButton(
@@ -449,9 +547,12 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
         const SizedBox(width: 6),
       ],
       bottomNavigationBar: const AppBottomNav(currentIndex: 1),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(20, 20, 20, 30),
-        children: [
+      body: RefreshIndicator(
+        onRefresh: _refreshMarketplace,
+        child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.fromLTRB(20, 20, 20, 30),
+          children: [
           const PageIntro(
             eyebrow: 'M4 / RESOURCE MARKETPLACE',
             title: 'Materials in motion.',
@@ -634,6 +735,10 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
             ),
           ),
 
+          // Visual separation between Marketplace AI and the official
+          // public/regional dataset section.
+          const SizedBox(height: 24),
+
           DropdownButtonFormField<String>(
             initialValue: _selectedOfficialContextState,
             isExpanded: true,
@@ -674,6 +779,17 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
               ),
             ],
           ),
+          if (_hasMatchCriteria) ...[
+            const SizedBox(height: 4),
+            const Text(
+              'Results include partial matches and are ranked by how closely they fit your active criteria.',
+              style: TextStyle(
+                color: AppColors.slate,
+                fontSize: 11,
+                height: 1.35,
+              ),
+            ),
+          ],
           const SizedBox(height: 10),
           if (sourceListings.isEmpty)
             _MarketplaceEmptyState(
@@ -691,9 +807,9 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
           else if (listings.isEmpty)
             _MarketplaceEmptyState(
               icon: Icons.search_off_outlined,
-              title: 'No listings match these filters.',
+              title: 'No listings match the selected criteria.',
               description:
-                  'Try a broader search or reset the current filters to see more material opportunities.',
+                  'No listing currently matches even one active search or filter criterion. Try changing or clearing some criteria.',
               actionLabel: 'Reset filters',
               onAction: _resetAllFilters,
             )
@@ -702,12 +818,14 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
               (listing) => _MarketplaceCard(
                 listing: listing,
                 requested: _requestedListingKeys.contains(_listingKey(listing)),
+                showMatchScore: _hasMatchCriteria,
                 matchScore: _matchScore(listing),
                 matchLabel: _matchLabel(listing),
                 onTap: () => _showDetail(listing),
               ),
             ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -718,31 +836,36 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
       _verifiedOnly ||
       _minimumQuantity > 0;
 
+  /// A match score is only meaningful when the user has actually supplied
+  /// something to match against. This prevents every unfiltered listing from
+  /// showing an arbitrary baseline percentage.
+  bool get _hasMatchCriteria =>
+      _search.text.trim().isNotEmpty ||
+      _filter != 'all' ||
+      _hasAdvancedFilters;
+
+  /// Returns marketplace listings using PARTIAL-MATCH behaviour.
+  ///
+  /// When no search/filter criteria are active, every listing is shown.
+  /// When criteria are active, a listing stays visible as long as it matches
+  /// at least one active criterion. This is intentional: the match percentage
+  /// then tells the user how closely each listing fits the full set of
+  /// requirements instead of hiding every imperfect alternative.
   List<Listing> _filteredListings(List<Listing> source) {
-    final query = _search.text.trim().toLowerCase();
-    final filtered = source.where((listing) {
-      final matchesType = _filter == 'all' || listing.type == _filter;
-      final searchableText =
-          '${listing.material} ${listing.location} ${listing.owner} ${listing.description}'
-              .toLowerCase();
-      final matchesSearch = query.isEmpty || searchableText.contains(query);
-      final matchesMaterial =
-          _material == null || listing.material == _material;
-      final matchesLocation =
-          _location == null || listing.location == _location;
-      final matchesVerified = !_verifiedOnly || listing.verified;
-      final matchesQuantity = listing.quantity >= _minimumQuantity;
-      return matchesType &&
-          matchesSearch &&
-          matchesMaterial &&
-          matchesLocation &&
-          matchesVerified &&
-          matchesQuantity;
-    }).toList();
+    final filtered = _hasMatchCriteria
+        ? source.where((listing) => _matchScore(listing) > 0).toList()
+        : List<Listing>.from(source);
 
     switch (_sort) {
       case 'relevance':
-        filtered.sort((a, b) => _matchScore(b).compareTo(_matchScore(a)));
+        if (_hasMatchCriteria) {
+          filtered.sort((a, b) {
+            final scoreComparison =
+                _matchScore(b).compareTo(_matchScore(a));
+            if (scoreComparison != 0) return scoreComparison;
+            return b.quantity.compareTo(a.quantity);
+          });
+        }
         break;
       case 'quantity':
         filtered.sort((a, b) => b.quantity.compareTo(a.quantity));
@@ -754,39 +877,162 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
         );
         break;
       case 'default':
+        // Once criteria are selected, ranking partial matches by score is the
+        // most useful default. Without criteria, keep the original order.
+        if (_hasMatchCriteria) {
+          filtered.sort((a, b) {
+            final scoreComparison =
+                _matchScore(b).compareTo(_matchScore(a));
+            if (scoreComparison != 0) return scoreComparison;
+            return b.quantity.compareTo(a.quantity);
+          });
+        }
         break;
     }
     return filtered;
   }
 
+  /// Calculates a transparent 0-100 match score using only criteria that
+  /// the user has actively selected.
+  ///
+  /// Weighting:
+  /// - Search text:        40 points
+  /// - Material filter:    20 points
+  /// - Location filter:    15 points
+  /// - Supply/demand type: 10 points
+  /// - Verified only:      10 points
+  /// - Minimum quantity:    5 points
+  ///
+  /// The denominator contains only active criteria. A listing that satisfies
+  /// every active criterion receives 100%. A listing that satisfies only some
+  /// criteria remains visible with a lower percentage.
   int _matchScore(Listing listing) {
+    if (!_hasMatchCriteria) return 0;
+
     final query = _search.text.trim().toLowerCase();
-    var score = 45;
-    if (query.isNotEmpty && listing.material.toLowerCase().contains(query)) {
-      score += 25;
+    var earnedPoints = 0.0;
+    var possiblePoints = 0.0;
+
+    if (query.isNotEmpty) {
+      possiblePoints += 40;
+      earnedPoints += _queryMatchPoints(listing, query);
     }
-    if (query.isNotEmpty && listing.location.toLowerCase().contains(query)) {
-      score += 10;
+
+    if (_material != null) {
+      possiblePoints += 20;
+      if (listing.material == _material) {
+        earnedPoints += 20;
+      }
     }
-    if (_material == listing.material) score += 8;
-    if (_location == listing.location) score += 6;
-    if (_filter != 'all' && listing.type == _filter) score += 4;
-    if (listing.verified) score += 7;
-    if (_minimumQuantity > 0 && listing.quantity >= _minimumQuantity) {
-      score += 3;
+
+    if (_location != null) {
+      possiblePoints += 15;
+      if (listing.location == _location) {
+        earnedPoints += 15;
+      }
     }
-    return score.clamp(45, 98).toInt();
+
+    if (_filter != 'all') {
+      possiblePoints += 10;
+      if (listing.type == _filter) {
+        earnedPoints += 10;
+      }
+    }
+
+    if (_verifiedOnly) {
+      possiblePoints += 10;
+      if (listing.verified) {
+        earnedPoints += 10;
+      }
+    }
+
+    if (_minimumQuantity > 0) {
+      possiblePoints += 5;
+      if (listing.quantity >= _minimumQuantity) {
+        earnedPoints += 5;
+      }
+    }
+
+    if (possiblePoints == 0) return 0;
+
+    return ((earnedPoints / possiblePoints) * 100)
+        .round()
+        .clamp(0, 100)
+        .toInt();
   }
 
+  /// Gives the search-text portion of the score a different strength based on
+  /// where the query matched. A material match is strongest because the
+  /// marketplace primarily connects material supply and demand.
+  double _queryMatchPoints(Listing listing, String query) {
+    final material = listing.material.toLowerCase();
+    final location = listing.location.toLowerCase();
+    final owner = listing.owner.toLowerCase();
+    final description = listing.description.toLowerCase();
+
+    if (material == query) return 40;
+    if (material.contains(query)) return 38;
+    if (location.contains(query)) return 32;
+    if (owner.contains(query)) return 26;
+    if (description.contains(query)) return 22;
+
+    return 0;
+  }
+
+  /// Explains the strongest reasons behind the displayed match score so the
+  /// percentage is not a black-box number.
   String _matchLabel(Listing listing) {
-    final query = _search.text.trim().toLowerCase();
-    if (query.isNotEmpty && listing.material.toLowerCase().contains(query)) {
-      return 'Material search match';
+    if (!_hasMatchCriteria) {
+      return 'No match criteria selected';
     }
-    if (_material == listing.material) return 'Material filter match';
-    if (_location == listing.location) return 'Location filter match';
-    if (listing.verified) return 'Verified ReSource business';
-    return 'Marketplace relevance';
+
+    final query = _search.text.trim().toLowerCase();
+    final reasons = <String>[];
+
+    if (query.isNotEmpty) {
+      final material = listing.material.toLowerCase();
+      final location = listing.location.toLowerCase();
+      final owner = listing.owner.toLowerCase();
+      final description = listing.description.toLowerCase();
+
+      if (material == query) {
+        reasons.add('Exact material search');
+      } else if (material.contains(query)) {
+        reasons.add('Material search');
+      } else if (location.contains(query)) {
+        reasons.add('Location search');
+      } else if (owner.contains(query)) {
+        reasons.add('Business search');
+      } else if (description.contains(query)) {
+        reasons.add('Description search');
+      }
+    }
+
+    if (_material != null && listing.material == _material) {
+      reasons.add('Material filter');
+    }
+
+    if (_location != null && listing.location == _location) {
+      reasons.add('Location filter');
+    }
+
+    if (_filter != 'all' && listing.type == _filter) {
+      reasons.add(_filter == 'supply' ? 'Supply filter' : 'Demand filter');
+    }
+
+    if (_verifiedOnly && listing.verified) {
+      reasons.add('Verified');
+    }
+
+    if (_minimumQuantity > 0 && listing.quantity >= _minimumQuantity) {
+      reasons.add('Quantity');
+    }
+
+    if (reasons.isEmpty) {
+      return 'Matches current criteria';
+    }
+
+    return reasons.take(3).join(' • ');
   }
 
   void _goHome() {
@@ -854,21 +1100,23 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
                     label: 'Trust status',
                     value: 'Verified ReSource business',
                   ),
-                _DetailLine(
-                  label: 'Search relevance',
-                  value: '${_matchScore(listing)}% · ${_matchLabel(listing)}',
-                ),
-                const Padding(
-                  padding: EdgeInsets.only(bottom: 12),
-                  child: Text(
-                    'Prototype relevance score only — confirm material grade, unit and collection terms directly with the business.',
-                    style: TextStyle(
-                      color: AppColors.slate,
-                      fontSize: 12,
-                      height: 1.35,
+                if (_hasMatchCriteria) ...[
+                  _DetailLine(
+                    label: 'Match score',
+                    value: '${_matchScore(listing)}% · ${_matchLabel(listing)}',
+                  ),
+                  const Padding(
+                    padding: EdgeInsets.only(bottom: 12),
+                    child: Text(
+                      'Weighted prototype match score based on the active search and filter criteria. Partial matches remain visible so alternatives can be compared. It is not a quality, trust, or market-value rating.',
+                      style: TextStyle(
+                        color: AppColors.slate,
+                        fontSize: 12,
+                        height: 1.35,
+                      ),
                     ),
                   ),
-                ),
+                ],
                 const SizedBox(height: 16),
                 if (isOwnListing)
                   SizedBox(
@@ -1088,7 +1336,7 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
                   ),
                   const SizedBox(height: 4),
                   const Text(
-                    'Use the filters below to focus on a viable supply or demand match.',
+                    'Choose the criteria that matter to you. Results can match one or more criteria, then they are ranked by match percentage instead of requiring a perfect match.',
                     style: TextStyle(color: AppColors.slate, height: 1.35),
                   ),
                   const SizedBox(height: 20),
@@ -1198,7 +1446,7 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
                               );
                             }
                           },
-                          child: const Text('Show results'),
+                          child: const Text('Rank matches'),
                         ),
                       ),
                     ],
@@ -1335,7 +1583,7 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
                                     ),
                                   if (request.responseNote.isNotEmpty)
                                     Text(
-                                      'Response: ${request.responseNote}',
+                                      'Decline reason: ${request.responseNote}',
                                       style: const TextStyle(
                                         color: AppColors.slate,
                                         fontSize: 12,
@@ -1350,7 +1598,7 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
                                             'CANCELLED' =>
                                               'This request was cancelled.',
                                             'ACCEPTED' =>
-                                              '${request.owner} accepted this request.',
+                                              '${request.owner} accepted this request. The marketplace listing is now matched.',
                                             'REJECTED' =>
                                               '${request.owner} declined this request.',
                                             _ =>
@@ -1378,6 +1626,145 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
                                       ),
                                     ],
                                   ),
+
+                                  // Transaction history is a persistent record,
+                                  // but completed outcomes should still give the
+                                  // user a sensible next action.
+                                  if (request.status == 'ACCEPTED') ...[
+                                    const SizedBox(height: 10),
+                                    Container(
+                                      width: double.infinity,
+                                      padding: const EdgeInsets.all(12),
+                                      decoration: BoxDecoration(
+                                        color: AppColors.green.withValues(
+                                          alpha: 0.07,
+                                        ),
+                                        border: Border.all(
+                                          color: AppColors.green.withValues(
+                                            alpha: 0.22,
+                                          ),
+                                        ),
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                      child: const Row(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Icon(
+                                            Icons.check_circle_outline,
+                                            color: AppColors.green,
+                                            size: 19,
+                                          ),
+                                          SizedBox(width: 9),
+                                          Expanded(
+                                            child: Text(
+                                              'Match confirmed. Review the proposed price and commercial terms before finalising the deal.',
+                                              style: TextStyle(
+                                                color: AppColors.slate,
+                                                fontSize: 12,
+                                                height: 1.35,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    SizedBox(
+                                      width: double.infinity,
+                                      child: FilledButton.icon(
+                                        onPressed: () {
+                                          Navigator.pop(sheetContext);
+                                          context.push('/fair-price', extra: request);
+                                        },
+                                        icon: const Icon(
+                                          Icons.compare_arrows,
+                                          size: 17,
+                                        ),
+                                        label: const Text(
+                                          'Continue with FairPrice',
+                                        ),
+                                      ),
+                                    ),
+                                  ] else if (request.status == 'REJECTED') ...[
+                                    const SizedBox(height: 10),
+                                    Container(
+                                      width: double.infinity,
+                                      padding: const EdgeInsets.all(12),
+                                      decoration: BoxDecoration(
+                                        color: AppColors.rust.withValues(
+                                          alpha: 0.06,
+                                        ),
+                                        border: Border.all(
+                                          color: AppColors.rust.withValues(
+                                            alpha: 0.20,
+                                          ),
+                                        ),
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                      child: Row(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          const Icon(
+                                            Icons.search_outlined,
+                                            color: AppColors.rust,
+                                            size: 19,
+                                          ),
+                                          const SizedBox(width: 9),
+                                          Expanded(
+                                            child: Text(
+                                              request.responseNote.trim().isEmpty
+                                                  ? 'Request declined. This request stays in your history. Return to the marketplace to compare other partial matches.'
+                                                  : 'Request declined. Review the response above, then return to the marketplace to compare other partial matches.',
+                                              style: const TextStyle(
+                                                color: AppColors.slate,
+                                                fontSize: 12,
+                                                height: 1.35,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    SizedBox(
+                                      width: double.infinity,
+                                      child: FilledButton.icon(
+                                        onPressed: () {
+                                          // Transaction history is already opened
+                                          // on top of the Marketplace screen, so
+                                          // closing the sheet returns directly to
+                                          // the marketplace results.
+                                          Navigator.pop(sheetContext);
+                                        },
+                                        icon: const Icon(
+                                          Icons.search_outlined,
+                                          size: 17,
+                                        ),
+                                        label: const Text(
+                                          'Find another marketplace match',
+                                        ),
+                                      ),
+                                    ),
+                                  ] else if (request.status == 'CANCELLED') ...[
+                                    const SizedBox(height: 10),
+                                    SizedBox(
+                                      width: double.infinity,
+                                      child: OutlinedButton.icon(
+                                        onPressed: () {
+                                          Navigator.pop(sheetContext);
+                                        },
+                                        icon: const Icon(
+                                          Icons.storefront_outlined,
+                                          size: 17,
+                                        ),
+                                        label: const Text(
+                                          'Return to marketplace listings',
+                                        ),
+                                      ),
+                                    ),
+                                  ],
                                 ],
                               ),
                             ),
@@ -1553,7 +1940,7 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
                                       Padding(
                                         padding: const EdgeInsets.only(top: 4),
                                         child: Text(
-                                          'Response: ${request.responseNote}',
+                                          'Decline reason: ${request.responseNote}',
                                           style: const TextStyle(
                                             color: AppColors.slate,
                                             fontSize: 12,
@@ -1787,6 +2174,7 @@ class _MarketplaceCard extends StatelessWidget {
   const _MarketplaceCard({
     required this.listing,
     required this.requested,
+    required this.showMatchScore,
     required this.matchScore,
     required this.matchLabel,
     required this.onTap,
@@ -1794,6 +2182,7 @@ class _MarketplaceCard extends StatelessWidget {
 
   final Listing listing;
   final bool requested;
+  final bool showMatchScore;
   final int matchScore;
   final String matchLabel;
   final VoidCallback onTap;
@@ -1888,21 +2277,33 @@ class _MarketplaceCard extends StatelessWidget {
                       ),
                     ),
                   ),
-                  Text(
-                    'Relevance $matchScore%',
-                    style: AppTheme.dataStyle.copyWith(
-                      color: AppColors.green,
-                      fontSize: 12,
+                  if (showMatchScore) ...[
+                    Text(
+                      'Match $matchScore%',
+                      style: AppTheme.dataStyle.copyWith(
+                        color: AppColors.green,
+                        fontSize: 12,
+                      ),
                     ),
+                    const SizedBox(width: 8),
+                  ],
+                  const Icon(
+                    Icons.chevron_right,
+                    size: 19,
+                    color: AppColors.slate,
                   ),
-                  const SizedBox(width: 6),
                 ],
               ),
-              const SizedBox(height: 5),
-              Text(
-                matchLabel,
-                style: const TextStyle(color: AppColors.slate, fontSize: 11),
-              ),
+              if (showMatchScore) ...[
+                const SizedBox(height: 5),
+                Text(
+                  matchLabel,
+                  style: const TextStyle(
+                    color: AppColors.slate,
+                    fontSize: 11,
+                  ),
+                ),
+              ],
             ],
           ),
         ),

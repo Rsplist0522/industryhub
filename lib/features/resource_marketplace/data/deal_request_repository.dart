@@ -1,6 +1,4 @@
-// Supabase persistence for M4 Marketplace outgoing deal requests.
-// The public Marketplace UI stays unchanged and imports this file as
-// deal_request_repository.dart after replacement.
+// Supabase persistence for M4 Marketplace deal requests and notifications.
 
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -21,6 +19,11 @@ class DealRequestRecord {
     required this.responseNote,
     required this.status,
     required this.sentAt,
+    this.requesterReadAt,
+    this.ownerReadAt,
+    this.quantityValue,
+    this.unit = 'kg',
+    this.askingPricePerKg,
   });
 
   final String id;
@@ -29,56 +32,99 @@ class DealRequestRecord {
   final String listingOwnerId;
   final String material;
   final String owner;
-  // Snapshot of the requesting business's name, so the listing owner has
-  // something to show besides a bare user id when reviewing a request.
   final String requesterName;
   final String location;
+
+  // Human-readable snapshot retained for transaction history.
   final String quantity;
+
+  // Structured deal snapshot used to pre-fill FairPrice.
+  final double? quantityValue;
+  final String unit;
+  final double? askingPricePerKg;
+
   final String note;
+
+  // For a rejected request this contains the required decline category,
+  // followed by an optional additional note.
   final String responseNote;
+
   final String status;
   final DateTime sentAt;
+  final DateTime? requesterReadAt;
+  final DateTime? ownerReadAt;
 
-  factory DealRequestRecord.fromSupabase(Map<String, dynamic> data) =>
+  factory DealRequestRecord.fromSupabase(Map<String, dynamic> data) {
+    final rawQuantityValue = data['quantity_value'];
+    final rawAskingPrice = data['asking_price_per_kg'];
+
+    return DealRequestRecord(
+      id: data['id'] as String? ?? '',
+      listingId: data['listing_id'] as String? ?? '',
+      requesterId: data['requester_id'] as String? ?? '',
+      listingOwnerId: data['listing_owner_id'] as String? ?? '',
+      material: data['material'] as String? ?? 'Unnamed material',
+      owner: data['owner'] as String? ?? 'Unspecified business',
+      requesterName:
+          data['requester_name'] as String? ?? 'A ReSource business',
+      location: data['location'] as String? ?? 'Location not specified',
+      quantity: data['quantity'] as String? ?? '',
+      quantityValue: rawQuantityValue is num
+          ? rawQuantityValue.toDouble()
+          : double.tryParse('$rawQuantityValue'),
+      unit: data['unit'] as String? ?? 'kg',
+      askingPricePerKg: rawAskingPrice is num
+          ? rawAskingPrice.toDouble()
+          : double.tryParse('$rawAskingPrice'),
+      note: data['note'] as String? ?? '',
+      responseNote: data['response_note'] as String? ?? '',
+      status: data['status'] as String? ?? 'REQUEST SENT',
+      sentAt:
+          DateTime.tryParse(data['created_at'] as String? ?? '') ??
+          DateTime.now(),
+      requesterReadAt: DateTime.tryParse(
+        data['requester_read_at'] as String? ?? '',
+      ),
+      ownerReadAt: DateTime.tryParse(
+        data['owner_read_at'] as String? ?? '',
+      ),
+    );
+  }
+
+  DealRequestRecord copyWith({
+    String? status,
+    String? responseNote,
+    DateTime? requesterReadAt,
+    DateTime? ownerReadAt,
+    double? quantityValue,
+    String? unit,
+    double? askingPricePerKg,
+  }) =>
       DealRequestRecord(
-        id: data['id'] as String? ?? '',
-        listingId: data['listing_id'] as String? ?? '',
-        requesterId: data['requester_id'] as String? ?? '',
-        listingOwnerId: data['listing_owner_id'] as String? ?? '',
-        material: data['material'] as String? ?? 'Unnamed material',
-        owner: data['owner'] as String? ?? 'Unspecified business',
-        requesterName:
-            data['requester_name'] as String? ?? 'A ReSource business',
-        location: data['location'] as String? ?? 'Location not specified',
-        quantity: data['quantity'] as String? ?? '',
-        note: data['note'] as String? ?? '',
-        responseNote: data['response_note'] as String? ?? '',
-        status: data['status'] as String? ?? 'REQUEST SENT',
-        sentAt:
-            DateTime.tryParse(data['created_at'] as String? ?? '') ??
-            DateTime.now(),
+        id: id,
+        listingId: listingId,
+        requesterId: requesterId,
+        listingOwnerId: listingOwnerId,
+        material: material,
+        owner: owner,
+        requesterName: requesterName,
+        location: location,
+        quantity: quantity,
+        quantityValue: quantityValue ?? this.quantityValue,
+        unit: unit ?? this.unit,
+        askingPricePerKg: askingPricePerKg ?? this.askingPricePerKg,
+        note: note,
+        responseNote: responseNote ?? this.responseNote,
+        status: status ?? this.status,
+        sentAt: sentAt,
+        requesterReadAt: requesterReadAt ?? this.requesterReadAt,
+        ownerReadAt: ownerReadAt ?? this.ownerReadAt,
       );
-
-  DealRequestRecord copyWith({String? status, String? responseNote}) => DealRequestRecord(
-    id: id,
-    listingId: listingId,
-    requesterId: requesterId,
-    listingOwnerId: listingOwnerId,
-    material: material,
-    owner: owner,
-    requesterName: requesterName,
-    location: location,
-    quantity: quantity,
-    note: note,
-    responseNote: responseNote ?? this.responseNote,
-    status: status ?? this.status,
-    sentAt: sentAt,
-  );
 }
 
 class DealRequestRepository {
   DealRequestRepository({SupabaseClient? supabase})
-    : _supabase = supabase ?? Supabase.instance.client;
+      : _supabase = supabase ?? Supabase.instance.client;
 
   final SupabaseClient _supabase;
 
@@ -104,9 +150,11 @@ class DealRequestRepository {
           'p_note': note.trim(),
         },
       );
+
       if (createdRow is! Map) {
         throw StateError('The deal request could not be created.');
       }
+
       return DealRequestRecord.fromSupabase(
         Map<String, dynamic>.from(createdRow),
       );
@@ -124,6 +172,47 @@ class DealRequestRepository {
         .select()
         .eq('requester_id', user.id)
         .order('created_at', ascending: false);
+
+    return (rows as List)
+        .map(
+          (row) => DealRequestRecord.fromSupabase(
+            Map<String, dynamic>.from(row as Map),
+          ),
+        )
+        .toList();
+  }
+
+  Future<List<DealRequestRecord>> fetchIncomingRequests() async {
+    final user = _supabase.auth.currentUser;
+    if (user == null) return const [];
+
+    final rows = await _supabase
+        .from('deal_requests')
+        .select()
+        .eq('listing_owner_id', user.id)
+        .order('created_at', ascending: false);
+
+    return (rows as List)
+        .map(
+          (row) => DealRequestRecord.fromSupabase(
+            Map<String, dynamic>.from(row as Map),
+          ),
+        )
+        .toList();
+  }
+
+  Future<List<DealRequestRecord>> fetchRelevantRequests() async {
+    final user = _supabase.auth.currentUser;
+    if (user == null) return const [];
+
+    final rows = await _supabase
+        .from('deal_requests')
+        .select()
+        .or(
+          'requester_id.eq.${user.id},listing_owner_id.eq.${user.id}',
+        )
+        .order('created_at', ascending: false);
+
     return (rows as List)
         .map(
           (row) => DealRequestRecord.fromSupabase(
@@ -149,29 +238,6 @@ class DealRequestRepository {
     }
   }
 
-  /// Requests sent TO listings this user owns, i.e. the ones only the
-  /// listing owner is allowed to accept or reject.
-  Future<List<DealRequestRecord>> fetchIncomingRequests() async {
-    final user = _supabase.auth.currentUser;
-    if (user == null) return const [];
-
-    final rows = await _supabase
-        .from('deal_requests')
-        .select()
-        .eq('listing_owner_id', user.id)
-        .order('created_at', ascending: false);
-    return (rows as List)
-        .map(
-          (row) => DealRequestRecord.fromSupabase(
-            Map<String, dynamic>.from(row as Map),
-          ),
-        )
-        .toList();
-  }
-
-  /// Accept or reject a request sent to one of the current user's listings.
-  /// The database RPC verifies the signed-in user is the listing owner and
-  /// performs the status transition atomically.
   Future<void> respondToRequest(
     String requestId, {
     required bool accept,
@@ -180,6 +246,10 @@ class DealRequestRepository {
     final user = _supabase.auth.currentUser;
     if (user == null) {
       throw StateError('Sign in before responding to a deal request.');
+    }
+
+    if (!accept && reason.trim().isEmpty) {
+      throw StateError('Choose a decline reason before rejecting the request.');
     }
 
     try {
@@ -196,12 +266,33 @@ class DealRequestRepository {
     }
   }
 
-  /// Live view of this user's outgoing requests. Used instead of a one-shot
-  /// fetch so the status updates on screen the moment the other business
-  /// accepts, rejects, or the record otherwise changes — no manual refresh.
+  Future<void> markOwnerNotificationRead(String requestId) async {
+    try {
+      await _supabase.rpc(
+        'mark_deal_request_owner_read',
+        params: {'p_request_id': requestId},
+      );
+    } on PostgrestException catch (error) {
+      throw StateError(error.message);
+    }
+  }
+
+  Future<void> markRequesterNotificationRead(String requestId) async {
+    try {
+      await _supabase.rpc(
+        'mark_deal_request_requester_read',
+        params: {'p_request_id': requestId},
+      );
+    } on PostgrestException catch (error) {
+      throw StateError(error.message);
+    }
+  }
+
   Stream<List<DealRequestRecord>> watchOutgoingRequests() {
     final user = _supabase.auth.currentUser;
-    if (user == null) return Stream<List<DealRequestRecord>>.value(const []);
+    if (user == null) {
+      return Stream<List<DealRequestRecord>>.value(const []);
+    }
 
     return _supabase
         .from('deal_requests')
@@ -210,18 +301,20 @@ class DealRequestRepository {
         .order('created_at', ascending: false)
         .map(
           (rows) => rows
-              .map((row) => DealRequestRecord.fromSupabase(
-                    Map<String, dynamic>.from(row),
-                  ))
+              .map(
+                (row) => DealRequestRecord.fromSupabase(
+                  Map<String, dynamic>.from(row),
+                ),
+              )
               .toList(),
         );
   }
 
-  /// Live view of requests sent to this user's listings, so a new incoming
-  /// request (or a cancellation) shows up without a manual refresh.
   Stream<List<DealRequestRecord>> watchIncomingRequests() {
     final user = _supabase.auth.currentUser;
-    if (user == null) return Stream<List<DealRequestRecord>>.value(const []);
+    if (user == null) {
+      return Stream<List<DealRequestRecord>>.value(const []);
+    }
 
     return _supabase
         .from('deal_requests')
@@ -230,11 +323,34 @@ class DealRequestRepository {
         .order('created_at', ascending: false)
         .map(
           (rows) => rows
-              .map((row) => DealRequestRecord.fromSupabase(
-                    Map<String, dynamic>.from(row),
-                  ))
+              .map(
+                (row) => DealRequestRecord.fromSupabase(
+                  Map<String, dynamic>.from(row),
+                ),
+              )
+              .toList(),
+        );
+  }
+
+  Stream<List<DealRequestRecord>> watchRelevantRequests() {
+    final user = _supabase.auth.currentUser;
+    if (user == null) {
+      return Stream<List<DealRequestRecord>>.value(const []);
+    }
+
+    // RLS already limits this stream to requests involving the signed-in user.
+    return _supabase
+        .from('deal_requests')
+        .stream(primaryKey: ['id'])
+        .order('created_at', ascending: false)
+        .map(
+          (rows) => rows
+              .map(
+                (row) => DealRequestRecord.fromSupabase(
+                  Map<String, dynamic>.from(row),
+                ),
+              )
               .toList(),
         );
   }
 }
-
