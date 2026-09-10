@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 
 import 'package:industryhub/core/app_state.dart';
+import 'package:industryhub/features/fair_price/data/fair_price_recommendation_repository.dart';
 import 'package:industryhub/features/fair_price/data/market_price_repository.dart';
 import 'package:industryhub/features/resource_marketplace/data/industrial_context_repository.dart';
 import 'package:industryhub/features/skill_match/data/training_programme_repository.dart';
@@ -64,9 +65,78 @@ void main() {
         'owner': 'Example SME',
         'owner_id': 'user-1',
       });
-
+ 
       expect(listing.quantityLabel, '0.25');
     });
+
+    test('filters current user listings out of peer marketplace benchmarks', () {
+      final listings = [
+        LocalListingPrice.fromSupabase({
+          'material': 'Copper wire granules',
+          'asking_price_per_kg': 100.0,
+          'quantity': 500,
+          'unit': 'kg',
+          'location': 'Johor',
+          'created_at': '2024-01-01T00:00:00Z',
+          'owner_id': 'user-a',
+        }),
+        LocalListingPrice.fromSupabase({
+          'material': 'Copper wire granules',
+          'asking_price_per_kg': 25.0,
+          'quantity': 500,
+          'unit': 'kg',
+          'location': 'Penang',
+          'created_at': '2024-01-02T00:00:00Z',
+          'owner_id': 'user-b',
+        }),
+        LocalListingPrice.fromSupabase({
+          'material': 'Copper wire granules',
+          'asking_price_per_kg': 27.0,
+          'quantity': 500,
+          'unit': 'kg',
+          'location': 'Selangor',
+          'created_at': '2024-01-03T00:00:00Z',
+          'owner_id': 'user-c',
+        }),
+      ];
+
+      final peerListings = MarketPriceRepository.filterPeerComparableListings(
+        listings,
+        'user-a',
+      );
+
+      expect(peerListings.map((listing) => listing.ownerId), ['user-b', 'user-c']);
+    });
+
+    test('maps FairPrice recommendation data to the saved session schema', () {
+      final recommendation = SavedFairPriceRecommendation.fromJson({
+        'id': 'rec-1',
+        'user_id': 'user-1',
+        'material_category': 'Copper',
+        'product': 'Copper wire granules',
+        'quantity': 500,
+        'proposed_price': 48.0,
+        'condition': 'Sorted & dry',
+        'collection_terms': 'Buyer collects',
+        'floor_price': 46.5,
+        'ceiling_price': 49.0,
+        'target_price': 47.8,
+        'confidence': 0.8,
+        'peer_observation_count': 3,
+        'notes': 'Peer market evidence used for benchmark.',
+        'has_live_evidence': true,
+        'created_at': '2026-09-10T00:00:00Z',
+        'updated_at': '2026-09-10T01:00:00Z',
+      });
+
+      expect(recommendation.materialCategory, 'Copper');
+      expect(recommendation.product, 'Copper wire granules');
+      expect(recommendation.quantity, 500);
+      expect(recommendation.proposedPricePerKg, 48.0);
+      expect(recommendation.peerObservationCount, 3);
+      expect(recommendation.toJson()['product'], 'Copper wire granules');
+    });
+
     test('maps training programme skills and duration', () {
       final programme = TrainingProgramme.fromSupabase({
         'id': 'course-1',
@@ -78,7 +148,7 @@ void main() {
         'source_name': 'Live catalogue',
         'source_url': 'https://example.com/course-1',
       });
-
+ 
       expect(programme.skills, ['Data and analytics']);
       expect(programme.durationDays, 4);
       expect(programme.sourceUrl, 'https://example.com/course-1');

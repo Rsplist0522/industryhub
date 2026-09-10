@@ -6,7 +6,9 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../core/auth_access.dart';
 import '../features/auth/presentation/auth_screens.dart';
+import '../features/fair_price/data/fair_price_recommendation_repository.dart';
 import '../features/fair_price/presentation/fair_price_screen.dart';
+import '../features/fair_price/presentation/saved_recommendations_screen.dart';
 import '../features/home/presentation/home_screen.dart';
 import '../features/resource_marketplace/presentation/marketplace_screen.dart';
 import '../features/resource_profiles/presentation/profile_screen.dart';
