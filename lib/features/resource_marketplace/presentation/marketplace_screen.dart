@@ -279,7 +279,7 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
                 ),
                 const SizedBox(height: 14),
                 DropdownButtonFormField<String>(
-                  value: selectedReason,
+                  initialValue: selectedReason,
                   isExpanded: true,
                   decoration: InputDecoration(
                     labelText: 'Decline reason *',
@@ -2427,5 +2427,4 @@ class _SavedSearchBanner extends StatelessWidget {
     );
   }
 }
-
 

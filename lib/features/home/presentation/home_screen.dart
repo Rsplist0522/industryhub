@@ -217,7 +217,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     : ListView.separated(
                         padding: const EdgeInsets.fromLTRB(12, 10, 12, 20),
                         itemCount: _notifications.length,
-                        separatorBuilder: (_, __) => const SizedBox(height: 6),
+                        separatorBuilder: (_, _) => const SizedBox(height: 6),
                         itemBuilder: (context, index) {
                           final request = _notifications[index];
 
@@ -352,7 +352,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                         onPressed: () async {
                           final reason = await _askRejectionReason();
 
-                          if (reason == null || !mounted) {
+                          if (reason == null ||
+                              !mounted ||
+                              !sheetContext.mounted) {
                             return;
                           }
 
@@ -472,7 +474,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 ),
                 const SizedBox(height: 14),
                 DropdownButtonFormField<String>(
-                  value: selectedReason,
+                  initialValue: selectedReason,
                   isExpanded: true,
                   decoration: InputDecoration(
                     labelText: 'Decline reason *',
