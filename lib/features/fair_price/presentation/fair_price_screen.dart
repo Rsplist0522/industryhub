@@ -44,6 +44,14 @@ class _NegotiationResult {
     required this.ceiling,
     required this.adjustments,
     required this.strategy,
+    // New explanatory fields (nullable when no numeric benchmark exists)
+    this.condition,
+    this.collection,
+    this.quantityAdjustment,
+    this.conditionAdjustmentFloor,
+    this.conditionAdjustmentCeiling,
+    this.collectionAdjustment,
+    this.adjustedReference,
   });
 
   final _Benchmark benchmark;
@@ -55,6 +63,19 @@ class _NegotiationResult {
   final double ceiling;
   final List<String> adjustments;
   final String strategy;
+
+  // Expose selected terms so the UI can display them in the breakdown
+  final String? condition;
+  final String? collection;
+
+  // Numeric adjustment values (per-kg). Nullable when no numeric benchmark.
+  final double? quantityAdjustment; // same applied to floor & ceiling
+  final double? conditionAdjustmentFloor;
+  final double? conditionAdjustmentCeiling;
+  final double? collectionAdjustment; // same applied to floor & ceiling
+
+  // Adjusted reference (the adjusted floor after all adjustments and rounding)
+  final double? adjustedReference;
 
   String get rangeLabel =>
       'RM ${floor.toStringAsFixed(2)} — ${ceiling.toStringAsFixed(2)} / kg';
@@ -400,85 +421,107 @@ Evidence library:
         ],
         strategy:
             'No numeric recommendation is available yet. The entered RM price is only your negotiation anchor; FairPrice can still discuss quality, evidence, and logistics in the AI chat.',
-      );
-    }
-
-    var floor = benchmark.low;
-    var ceiling = benchmark.high;
-    final adjustments = <String>[];
-
-    if (quantity >= 1000) {
-      floor -= 0.50;
-      ceiling -= 0.50;
-      adjustments.add(
-        'Larger volume creates room for a modest buyer discount.',
-      );
-    } else if (quantity < 250) {
-      floor += 0.50;
-      ceiling += 0.50;
-      adjustments.add(
-        'Smaller volume supports a slightly higher handling allowance.',
-      );
-    } else {
-      adjustments.add(
-        'The quoted volume sits within the indicative reference band.',
-      );
-    }
-
-    switch (_condition) {
-      case 'Sorted & dry':
-        floor += 0.50;
-        ceiling += 0.75;
-        adjustments.add(
-          'Sorted, dry material strengthens your quality position.',
+          condition: null,
+          collection: null,
+          quantityAdjustment: null,
+          conditionAdjustmentFloor: null,
+          conditionAdjustmentCeiling: null,
+          collectionAdjustment: null,
+          adjustedReference: null,
         );
-      case 'Verified grade':
-        floor += 1.00;
-        ceiling += 1.50;
-        adjustments.add(
-          'Verified grade supports the strongest quality premium.',
-        );
-      default:
-        adjustments.add(
-          'Mixed material keeps the recommendation near the conservative end.',
-        );
-    }
+      }
 
-    if (_collection == 'Seller delivers') {
-      floor -= 0.75;
-      ceiling -= 0.75;
-      adjustments.add('Seller delivery absorbs part of the logistics cost.');
-    } else {
-      adjustments.add(
-        'Buyer collection protects the offer from delivery-cost pressure.',
+      double floor = benchmark.low;
+      double ceiling = benchmark.high;
+      final adjustments = <String>[];
+
+      // Track numeric adjustments (per-kg) so UI can display them exactly as applied.
+      double quantityAdj = 0.0;
+      double conditionAdjFloor = 0.0;
+      double conditionAdjCeiling = 0.0;
+      double collectionAdj = 0.0;
+
+      // Quantity adjustment (same to floor & ceiling in current logic)
+      if (quantity >= 1000) {
+        quantityAdj = -0.50;
+        floor += quantityAdj;
+        ceiling += quantityAdj;
+        adjustments.add('Larger volume creates room for a modest buyer discount.');
+      } else if (quantity < 250) {
+        quantityAdj = 0.50;
+        floor += quantityAdj;
+        ceiling += quantityAdj;
+        adjustments.add('Smaller volume supports a slightly higher handling allowance.');
+      } else {
+        adjustments.add('The quoted volume sits within the indicative reference band.');
+      }
+
+      // Material condition adjustment (may differ for floor and ceiling)
+      switch (_condition) {
+        case 'Sorted & dry':
+          conditionAdjFloor = 0.50;
+          conditionAdjCeiling = 0.75;
+          floor += conditionAdjFloor;
+          ceiling += conditionAdjCeiling;
+          adjustments.add('Sorted, dry material strengthens your quality position.');
+          break;
+        case 'Verified grade':
+          conditionAdjFloor = 1.00;
+          conditionAdjCeiling = 1.50;
+          floor += conditionAdjFloor;
+          ceiling += conditionAdjCeiling;
+          adjustments.add('Verified grade supports the strongest quality premium.');
+          break;
+        default:
+          // Mixed / unsorted
+          adjustments.add('Mixed material keeps the recommendation near the conservative end.');
+          break;
+      }
+
+      // Collection/logistics adjustment (same to floor & ceiling in current logic)
+      if (_collection == 'Seller delivers') {
+        collectionAdj = -0.75;
+        floor += collectionAdj;
+        ceiling += collectionAdj;
+        adjustments.add('Seller delivery absorbs part of the logistics cost.');
+      } else {
+        adjustments.add('Buyer collection protects the offer from delivery-cost pressure.');
+      }
+
+      if (floor < 0) floor = 0;
+      if (ceiling < floor) ceiling = floor;
+
+      // Round to fifty sen as the existing logic does
+      floor = _roundToFiftySen(floor);
+      ceiling = _roundToFiftySen(ceiling);
+      if (ceiling < floor) ceiling = floor;
+      final target = _roundToFiftySen((floor + ceiling) / 2);
+
+      final strategy = proposedPrice < floor
+          ? 'Your proposed price is below the recommended floor. Open at RM ${target.toStringAsFixed(2)}/kg and avoid accepting below RM ${floor.toStringAsFixed(2)}/kg unless the terms improve.'
+          : proposedPrice > ceiling
+              ? 'Your proposed price is above the recommended ceiling. Lead with your quality evidence, but prepare to settle near RM ${target.toStringAsFixed(2)}/kg.'
+              : 'Your proposed price is inside the recommended range. Open at RM ${target.toStringAsFixed(2)}/kg and use collection and quality terms to protect the floor.';
+
+      return _NegotiationResult(
+        benchmark: benchmark,
+        product: product,
+        quantity: quantity,
+        proposedPrice: proposedPrice,
+        floor: floor,
+        target: target,
+        ceiling: ceiling,
+        adjustments: adjustments,
+        strategy: strategy,
+        condition: _condition,
+        collection: _collection,
+        quantityAdjustment: quantityAdj,
+        conditionAdjustmentFloor: conditionAdjFloor,
+        conditionAdjustmentCeiling: conditionAdjCeiling,
+        collectionAdjustment: collectionAdj,
+        adjustedReference: floor,
       );
     }
-
-    if (floor < 0) floor = 0;
-    if (ceiling < floor) ceiling = floor;
-    floor = _roundToFiftySen(floor);
-    ceiling = _roundToFiftySen(ceiling);
-    if (ceiling < floor) ceiling = floor;
-    final target = _roundToFiftySen((floor + ceiling) / 2);
-
-    final strategy = proposedPrice < floor
-        ? 'Your proposed price is below the recommended floor. Open at RM ${target.toStringAsFixed(2)}/kg and avoid accepting below RM ${floor.toStringAsFixed(2)}/kg unless the terms improve.'
-        : proposedPrice > ceiling
-        ? 'Your proposed price is above the recommended ceiling. Lead with your quality evidence, but prepare to settle near RM ${target.toStringAsFixed(2)}/kg.'
-        : 'Your proposed price is inside the recommended range. Open at RM ${target.toStringAsFixed(2)}/kg and use collection and quality terms to protect the floor.';
-
-    return _NegotiationResult(
-      benchmark: benchmark,
-      product: product,
-      quantity: quantity,
-      proposedPrice: proposedPrice,
-      floor: floor,
-      target: target,
-      ceiling: ceiling,
-      adjustments: adjustments,
-      strategy: strategy,
-    );
-  }
 
   _Benchmark _benchmarkFor(String product, double proposedPrice) {
     final prices =
@@ -1250,6 +1293,114 @@ class _PriceResult extends StatelessWidget {
                 target: result.target,
                 ceiling: result.ceiling,
               ),
+              const SizedBox(height: 12),
+              if (result.benchmark.isLiveEvidence) ...[
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: AppColors.white.withValues(alpha: 0.04),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: AppColors.white.withValues(alpha: 0.08),
+                    ),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'PRICE CALCULATION',
+                        style: AppTheme.eyebrowStyle.copyWith(
+                          color: AppColors.white.withValues(alpha: 0.68),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+
+                      // Base benchmark (show the exact peer range used by the calculation)
+                      Text(
+                        'Peer marketplace benchmark',
+                        style: TextStyle(
+                          color: AppColors.white.withValues(alpha: 0.9),
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'RM ${result.benchmark.low.toStringAsFixed(2)} – RM ${result.benchmark.high.toStringAsFixed(2)}/kg',
+                        style: TextStyle(color: AppColors.white.withValues(alpha: 0.9)),
+                      ),
+
+                      const SizedBox(height: 8),
+                      Text(
+                        'Adjustments',
+                        style: AppTheme.eyebrowStyle.copyWith(
+                          color: AppColors.white.withValues(alpha: 0.68),
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+
+                      // Quantity
+                      Text(
+                        'Quantity: ${result.quantity.toStringAsFixed(0)} kg',
+                        style: TextStyle(color: AppColors.white.withValues(alpha: 0.9)),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        result.quantityAdjustment == null || result.quantityAdjustment == 0
+                            ? 'No adjustment'
+                            : '${result.quantityAdjustment! > 0 ? '+' : '-'}RM ${result.quantityAdjustment!.abs().toStringAsFixed(2)}/kg',
+                        style: TextStyle(color: AppColors.white.withValues(alpha: 0.9)),
+                      ),
+
+                      const SizedBox(height: 6),
+                      // Material condition
+                      Text(
+                        'Material condition: ${result.condition ?? 'Unspecified'}',
+                        style: TextStyle(color: AppColors.white.withValues(alpha: 0.9)),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        (result.conditionAdjustmentFloor == null || (result.conditionAdjustmentFloor == 0 && result.conditionAdjustmentCeiling == 0))
+                            ? 'No adjustment'
+                            : (result.conditionAdjustmentFloor == result.conditionAdjustmentCeiling
+                                ? '${result.conditionAdjustmentFloor! > 0 ? '+' : '-'}RM ${result.conditionAdjustmentFloor!.abs().toStringAsFixed(2)}/kg'
+                                : '${result.conditionAdjustmentFloor == 0 ? '' : '${result.conditionAdjustmentFloor! > 0 ? '+' : '-'}RM ${result.conditionAdjustmentFloor!.abs().toStringAsFixed(2)}/kg (floor)'}${result.conditionAdjustmentCeiling == 0 ? '' : ' / ${result.conditionAdjustmentCeiling! > 0 ? '+' : '-'}RM ${result.conditionAdjustmentCeiling!.abs().toStringAsFixed(2)}/kg (ceiling)'}'),
+                        style: TextStyle(color: AppColors.white.withValues(alpha: 0.9)),
+                      ),
+
+                      const SizedBox(height: 6),
+                      // Collection terms
+                      Text(
+                        'Collection terms: ${result.collection ?? 'Unspecified'}',
+                        style: TextStyle(color: AppColors.white.withValues(alpha: 0.9)),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        result.collectionAdjustment == null || result.collectionAdjustment == 0
+                            ? 'No adjustment'
+                            : '${result.collectionAdjustment! > 0 ? '+' : '-'}RM ${result.collectionAdjustment!.abs().toStringAsFixed(2)}/kg',
+                        style: TextStyle(color: AppColors.white.withValues(alpha: 0.9)),
+                      ),
+
+                      const SizedBox(height: 8),
+                      Text(
+                        'Adjusted reference',
+                        style: TextStyle(color: AppColors.white.withValues(alpha: 0.9), fontWeight: FontWeight.w700),
+                      ),
+                      Text('RM ${result.adjustedReference?.toStringAsFixed(2) ?? result.floor.toStringAsFixed(2)}/kg', style: TextStyle(color: AppColors.white)),
+
+                      const SizedBox(height: 6),
+                      Text('Recommended range', style: TextStyle(color: AppColors.white.withValues(alpha: 0.9), fontWeight: FontWeight.w700)),
+                      Text(result.rangeLabel, style: TextStyle(color: AppColors.white)),
+
+                      const SizedBox(height: 6),
+                      Text('Suggested opening point', style: TextStyle(color: AppColors.white.withValues(alpha: 0.9), fontWeight: FontWeight.w700)),
+                      Text('RM ${result.target.toStringAsFixed(2)}/kg', style: TextStyle(color: AppColors.white)),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
+              ],
             ] else ...[
               Text(
                 'No numeric range yet',
