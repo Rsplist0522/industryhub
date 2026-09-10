@@ -7,6 +7,29 @@ const safeSignupConfirmationMessage =
     'If this is a new email, a confirmation link has been sent. '
     'If you already have an account, please sign in.';
 
+const mobileEmailConfirmationDeepLink =
+    'com.example.industryhub://login-callback/';
+const localEmailConfirmationWebUrl = 'http://localhost:49311/auth/confirmed';
+
+String resolveEmailConfirmationRedirect({
+  required bool isWeb,
+  required Uri baseUri,
+  required bool isMobile,
+  String? configuredWebRedirect,
+}) {
+  if (isWeb) return '${baseUri.origin}/auth/confirmed';
+
+  final configuredUri = Uri.tryParse(configuredWebRedirect?.trim() ?? '');
+  if (configuredUri != null &&
+      (configuredUri.scheme == 'https' || configuredUri.scheme == 'http') &&
+      configuredUri.host.isNotEmpty) {
+    return configuredUri.toString();
+  }
+
+  if (isMobile) return mobileEmailConfirmationDeepLink;
+  return localEmailConfirmationWebUrl;
+}
+
 bool hasVerifiedAuthAccess({
   required bool hasSession,
   required String? emailConfirmedAt,

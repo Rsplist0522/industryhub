@@ -12,21 +12,14 @@ import '../../../core/widgets.dart';
 import '../../../core/validators.dart';
 
 String _confirmationRedirectUrl() {
-  if (kIsWeb) return '${Uri.base.origin}/auth/confirmed';
-
-  if (defaultTargetPlatform == TargetPlatform.android ||
-      defaultTargetPlatform == TargetPlatform.iOS) {
-    return 'com.example.industryhub://login-callback/';
-  }
-
-  final configuredUrl = dotenv.env['AUTH_WEB_REDIRECT_URL']?.trim() ?? '';
-  final configuredUri = Uri.tryParse(configuredUrl);
-  if (configuredUri != null &&
-      (configuredUri.scheme == 'https' || configuredUri.scheme == 'http') &&
-      configuredUri.host.isNotEmpty) {
-    return configuredUri.toString();
-  }
-  return 'http://localhost:49311/auth/confirmed';
+  return resolveEmailConfirmationRedirect(
+    isWeb: kIsWeb,
+    baseUri: Uri.base,
+    isMobile:
+        defaultTargetPlatform == TargetPlatform.android ||
+        defaultTargetPlatform == TargetPlatform.iOS,
+    configuredWebRedirect: dotenv.env['AUTH_WEB_REDIRECT_URL'],
+  );
 }
 
 Future<String> _signedInDestination() async {

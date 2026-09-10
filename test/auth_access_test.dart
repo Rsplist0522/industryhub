@@ -61,6 +61,43 @@ void main() {
     });
   });
 
+  group('email confirmation redirect', () {
+    test('configured web URL takes priority on Android', () {
+      expect(
+        resolveEmailConfirmationRedirect(
+          isWeb: false,
+          baseUri: Uri.parse('file:///'),
+          isMobile: true,
+          configuredWebRedirect: 'http://localhost:49311/auth/confirmed',
+        ),
+        'http://localhost:49311/auth/confirmed',
+      );
+    });
+
+    test('mobile deep link remains the fallback', () {
+      expect(
+        resolveEmailConfirmationRedirect(
+          isWeb: false,
+          baseUri: Uri.parse('file:///'),
+          isMobile: true,
+        ),
+        mobileEmailConfirmationDeepLink,
+      );
+    });
+
+    test('Flutter Web keeps its current-origin confirmation page', () {
+      expect(
+        resolveEmailConfirmationRedirect(
+          isWeb: true,
+          baseUri: Uri.parse('http://localhost:49311/signup'),
+          isMobile: false,
+          configuredWebRedirect: 'https://ignored.example/auth/confirmed',
+        ),
+        'http://localhost:49311/auth/confirmed',
+      );
+    });
+  });
+
   testWidgets('email confirmation page explains success and offers sign in', (
     tester,
   ) async {
