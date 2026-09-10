@@ -64,9 +64,49 @@ void main() {
         'owner': 'Example SME',
         'owner_id': 'user-1',
       });
-
+ 
       expect(listing.quantityLabel, '0.25');
     });
+
+    test('filters current user listings out of peer marketplace benchmarks', () {
+      final listings = [
+        LocalListingPrice.fromSupabase({
+          'material': 'Copper wire granules',
+          'asking_price_per_kg': 100.0,
+          'quantity': 500,
+          'unit': 'kg',
+          'location': 'Johor',
+          'created_at': '2024-01-01T00:00:00Z',
+          'owner_id': 'user-a',
+        }),
+        LocalListingPrice.fromSupabase({
+          'material': 'Copper wire granules',
+          'asking_price_per_kg': 25.0,
+          'quantity': 500,
+          'unit': 'kg',
+          'location': 'Penang',
+          'created_at': '2024-01-02T00:00:00Z',
+          'owner_id': 'user-b',
+        }),
+        LocalListingPrice.fromSupabase({
+          'material': 'Copper wire granules',
+          'asking_price_per_kg': 27.0,
+          'quantity': 500,
+          'unit': 'kg',
+          'location': 'Selangor',
+          'created_at': '2024-01-03T00:00:00Z',
+          'owner_id': 'user-c',
+        }),
+      ];
+
+      final peerListings = MarketPriceRepository.filterPeerComparableListings(
+        listings,
+        'user-a',
+      );
+
+      expect(peerListings.map((listing) => listing.ownerId), ['user-b', 'user-c']);
+    });
+
     test('maps training programme skills and duration', () {
       final programme = TrainingProgramme.fromSupabase({
         'id': 'course-1',

@@ -75,6 +75,7 @@ class LocalListingPrice {
     required this.unit,
     required this.location,
     required this.observedOn,
+    this.ownerId = '',
   });
 
   final String material;
@@ -83,6 +84,7 @@ class LocalListingPrice {
   final String unit;
   final String location;
   final DateTime observedOn;
+  final String ownerId;
 
   factory LocalListingPrice.fromSupabase(Map<String, dynamic> data) =>
       LocalListingPrice(
@@ -94,6 +96,7 @@ class LocalListingPrice {
         observedOn:
             DateTime.tryParse(data['created_at'] as String? ?? '') ??
             DateTime.now(),
+        ownerId: data['owner_id'] as String? ?? '',
       );
 }
 
@@ -237,22 +240,40 @@ class MarketPriceRepository {
     return latest;
   }
 
+  static List<LocalListingPrice> filterPeerComparableListings(
+    List<LocalListingPrice> listings,
+    String? currentUserId,
+  ) {
+    if (currentUserId == null || currentUserId.isEmpty) return listings;
+    return listings
+        .where((listing) => listing.ownerId != currentUserId)
+        .toList();
+  }
+
   Future<List<LocalListingPrice>> fetchLatestLocalListingPrices(
     String product,
   ) async {
     final query = product.trim();
     if (query.isEmpty) return const [];
-    final rows = await _supabase
+
+    final currentUserId = Supabase.instance.client.auth.currentUser?.id;
+    var supabaseQuery = _supabase
         .from('listings')
         .select(
-          'material, asking_price_per_kg, quantity, unit, location, created_at',
+          'owner_id, material, asking_price_per_kg, quantity, unit, location, created_at',
         )
         .ilike('material', '%$query%')
         .eq('status', 'ACTIVE')
-        .not('asking_price_per_kg', 'is', null)
+        .not('asking_price_per_kg', 'is', null);
+
+    if (currentUserId != null && currentUserId.isNotEmpty) {
+      supabaseQuery = supabaseQuery.neq('owner_id', currentUserId);
+    }
+
+    final rows = await supabaseQuery
         .order('created_at', ascending: false)
         .limit(50);
-    return (rows as List)
+    final listings = (rows as List)
         .map(
           (row) => LocalListingPrice.fromSupabase(
             Map<String, dynamic>.from(row as Map),
@@ -260,6 +281,7 @@ class MarketPriceRepository {
         )
         .where((listing) => listing.pricePerKg > 0)
         .toList();
+    return filterPeerComparableListings(listings, currentUserId);
   }
 
   String? _fredDatasetFor(String product) {

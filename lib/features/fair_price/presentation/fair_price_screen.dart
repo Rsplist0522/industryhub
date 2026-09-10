@@ -471,21 +471,21 @@ Evidence library:
           ..sort();
     if (prices.isEmpty) {
       return _Benchmark(
-        label: 'No live local benchmark loaded',
-        low: proposedPrice,
-        high: proposedPrice,
+        label: 'No peer marketplace benchmark loaded',
+        low: 0,
+        high: 0,
         note:
-            'No comparable Supabase listing has published an asking price for this material. The entered price is a negotiation anchor, not a market quote.',
+            'No comparable listing from other users has published an asking price for this material. The entered RM/kg is only a negotiation anchor, not a market benchmark.',
         isLiveEvidence: false,
       );
     }
 
     return _Benchmark(
-      label: 'Live Supabase comparable listings',
+      label: 'Peer marketplace comparable listings',
       low: prices.first,
       high: prices.last,
       note:
-          'Based on ${prices.length} published asking-price observation${prices.length == 1 ? '' : 's'} in the live marketplace. Confirm grade, quantity, and logistics before agreement.',
+          'Based on ${prices.length} peer asking-price observation${prices.length == 1 ? '' : 's'} from other users. Confirm grade, quantity, and logistics before agreement.',
       isLiveEvidence: true,
     );
   }
@@ -876,7 +876,7 @@ class _BenchmarkCard extends StatelessWidget {
             Text(
               benchmark.isLiveEvidence
                   ? 'Live Supabase listing evidence — not a guaranteed Malaysian market quote.'
-                  : 'No live local benchmark is available — the entered price is only a negotiation anchor.',
+                  : 'No peer marketplace benchmark is available — the entered price is only a negotiation anchor.',
               style: const TextStyle(
                 color: AppColors.slate,
                 fontSize: 11,
@@ -968,10 +968,10 @@ class _MarketSignalCard extends StatelessWidget {
               if (commodity != null || materialIndex != null || ppi != null)
                 const SizedBox(height: 9),
               _MarketSignalLine(
-                label: 'Local marketplace asking prices',
+                label: 'Peer marketplace asking prices',
                 value: '${localListingPrices.length} observations',
                 detail:
-                    'Live Supabase listings · used for the negotiation band',
+                    'Comparable listings from other users · used for the negotiation band',
               ),
             ],
             if (!isLoading &&
