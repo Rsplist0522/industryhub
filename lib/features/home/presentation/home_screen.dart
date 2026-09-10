@@ -20,7 +20,9 @@ class HomeScreen extends ConsumerStatefulWidget {
 class _HomeScreenState extends ConsumerState<HomeScreen> {
   final _dealRequestRepository = DealRequestRepository();
   final _notifications = <DealRequestRecord>[];
+
   StreamSubscription<List<DealRequestRecord>>? _notificationSubscription;
+
   bool _notificationsLoading = true;
   String? _notificationError;
 
@@ -38,26 +40,31 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   void _subscribeToNotifications() {
     _notificationSubscription?.cancel();
+
     _notificationSubscription = _dealRequestRepository
         .watchRelevantRequests()
         .listen(
           (records) {
             if (!mounted) return;
+
             setState(() {
               _notifications
                 ..clear()
                 ..addAll(records);
+
               _notificationsLoading = false;
               _notificationError = null;
             });
           },
           onError: (Object error) {
             if (!mounted) return;
+
             setState(() {
               _notificationsLoading = false;
               _notificationError =
                   'Marketplace notifications could not be loaded.';
             });
+
             debugPrint('Home notification stream failed: $error');
           },
         );
@@ -68,63 +75,95 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   bool _isOwnerSide(DealRequestRecord request) {
     final userId = Supabase.instance.client.auth.currentUser?.id;
+
     return userId != null && request.listingOwnerId == userId;
   }
 
   bool _isUnreadNotification(DealRequestRecord request) {
     if (_isOwnerSide(request)) {
-      // Owners need attention for a new request or a requester cancellation.
-      if (request.status != 'REQUEST SENT' && request.status != 'CANCELLED') {
+      // Listing owners need a notification for a new incoming request
+      // or when the requester cancels it.
+      if (request.status != 'REQUEST SENT' &&
+          request.status != 'CANCELLED') {
         return false;
       }
+
       return request.ownerReadAt == null;
     }
 
-    // Requesters only need a new notification when the other business has
-    // accepted or rejected their request.
-    if (request.status != 'ACCEPTED' && request.status != 'REJECTED') {
+    // Requesters only need a new notification when the other business
+    // accepts or rejects the request.
+    if (request.status != 'ACCEPTED' &&
+        request.status != 'REJECTED') {
       return false;
     }
+
     return request.requesterReadAt == null;
   }
 
-  Future<void> _markNotificationRead(DealRequestRecord request) async {
+  Future<void> _markNotificationRead(
+    DealRequestRecord request,
+  ) async {
     if (!_isUnreadNotification(request)) return;
 
     try {
       if (_isOwnerSide(request)) {
-        await _dealRequestRepository.markOwnerNotificationRead(request.id);
+        await _dealRequestRepository.markOwnerNotificationRead(
+          request.id,
+        );
       } else {
-        await _dealRequestRepository.markRequesterNotificationRead(request.id);
+        await _dealRequestRepository.markRequesterNotificationRead(
+          request.id,
+        );
       }
 
       if (!mounted) return;
-      final index = _notifications.indexWhere((item) => item.id == request.id);
-      if (index >= 0) {
-        final now = DateTime.now();
-        setState(() {
-          _notifications[index] = _isOwnerSide(request)
-              ? request.copyWith(ownerReadAt: now)
-              : request.copyWith(requesterReadAt: now);
-        });
-      }
+
+      final index = _notifications.indexWhere(
+        (item) => item.id == request.id,
+      );
+
+      if (index < 0) return;
+
+      final now = DateTime.now();
+
+      setState(() {
+        _notifications[index] = _isOwnerSide(request)
+            ? request.copyWith(ownerReadAt: now)
+            : request.copyWith(requesterReadAt: now);
+      });
     } catch (error) {
-      debugPrint('Could not mark notification as read: $error');
+      debugPrint(
+        'Could not mark notification as read: $error',
+      );
     }
+  }
+
+  Future<void> _refreshHome() async {
+    await ref
+        .read(appStateProvider.notifier)
+        .refreshSupabaseData();
+
+    _subscribeToNotifications();
   }
 
   Future<void> _signOut() async {
     try {
       await Supabase.instance.client.auth.signOut();
-      if (mounted) context.go('/login');
-    } catch (_) {
+
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Could not sign out. Please try again.'),
-          ),
-        );
+        context.go('/login');
       }
+    } catch (_) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Could not sign out. Please try again.',
+          ),
+        ),
+      );
     }
   }
 
@@ -140,21 +179,30 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         top: false,
         child: ConstrainedBox(
           constraints: BoxConstraints(
-            maxHeight: MediaQuery.sizeOf(sheetContext).height * 0.82,
+            maxHeight:
+                MediaQuery.sizeOf(sheetContext).height * 0.82,
           ),
           child: Column(
             children: [
               Padding(
-                padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
+                padding: const EdgeInsets.fromLTRB(
+                  20,
+                  8,
+                  20,
+                  12,
+                ),
                 child: Row(
                   children: [
                     Expanded(
                       child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                        crossAxisAlignment:
+                            CrossAxisAlignment.start,
                         children: [
                           Text(
                             'Notifications',
-                            style: Theme.of(sheetContext).textTheme.titleLarge,
+                            style: Theme.of(sheetContext)
+                                .textTheme
+                                .titleLarge,
                           ),
                           const SizedBox(height: 3),
                           Text(
@@ -172,7 +220,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     IconButton(
                       tooltip: 'Refresh notifications',
                       onPressed: _subscribeToNotifications,
-                      icon: const Icon(Icons.refresh_outlined),
+                      icon: const Icon(
+                        Icons.refresh_outlined,
+                      ),
                     ),
                   ],
                 ),
@@ -180,43 +230,80 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               const Divider(height: 1),
               Expanded(
                 child: _notificationsLoading
-                    ? const Center(child: CircularProgressIndicator())
+                    ? const Center(
+                        child: CircularProgressIndicator(),
+                      )
                     : _notificationError != null
-                    ? _NotificationEmptyState(
-                        icon: Icons.cloud_off_outlined,
-                        title: 'Notifications are unavailable.',
-                        description: _notificationError!,
-                      )
-                    : _notifications.isEmpty
-                    ? const _NotificationEmptyState(
-                        icon: Icons.notifications_none_outlined,
-                        title: 'No notifications yet.',
-                        description:
-                            'New marketplace deal requests and responses will appear here.',
-                      )
-                    : ListView.separated(
-                        padding: const EdgeInsets.fromLTRB(12, 10, 12, 20),
-                        itemCount: _notifications.length,
-                        separatorBuilder: (_, __) =>
-                            const SizedBox(height: 6),
-                        itemBuilder: (context, index) {
-                          final request = _notifications[index];
-                          final unread = _isUnreadNotification(request);
-                          return _NotificationTile(
-                            request: request,
-                            isOwnerSide: _isOwnerSide(request),
-                            unread: unread,
-                            onTap: () async {
-                              Navigator.pop(sheetContext);
-                              await Future<void>.delayed(
-                                const Duration(milliseconds: 220),
-                              );
-                              if (!mounted) return;
-                              await _openNotification(request);
-                            },
-                          );
-                        },
-                      ),
+                        ? _NotificationEmptyState(
+                            icon:
+                                Icons.cloud_off_outlined,
+                            title:
+                                'Notifications are unavailable.',
+                            description:
+                                _notificationError!,
+                          )
+                        : _notifications.isEmpty
+                            ? const _NotificationEmptyState(
+                                icon: Icons
+                                    .notifications_none_outlined,
+                                title:
+                                    'No notifications yet.',
+                                description:
+                                    'New marketplace deal requests and responses will appear here.',
+                              )
+                            : ListView.separated(
+                                padding:
+                                    const EdgeInsets.fromLTRB(
+                                  12,
+                                  10,
+                                  12,
+                                  20,
+                                ),
+                                itemCount:
+                                    _notifications.length,
+                                separatorBuilder:
+                                    (_, __) =>
+                                        const SizedBox(
+                                  height: 6,
+                                ),
+                                itemBuilder:
+                                    (context, index) {
+                                  final request =
+                                      _notifications[index];
+
+                                  final unread =
+                                      _isUnreadNotification(
+                                    request,
+                                  );
+
+                                  return _NotificationTile(
+                                    request: request,
+                                    isOwnerSide:
+                                        _isOwnerSide(
+                                      request,
+                                    ),
+                                    unread: unread,
+                                    onTap: () async {
+                                      Navigator.pop(
+                                        sheetContext,
+                                      );
+
+                                      await Future<void>
+                                          .delayed(
+                                        const Duration(
+                                          milliseconds: 220,
+                                        ),
+                                      );
+
+                                      if (!mounted) return;
+
+                                      await _openNotification(
+                                        request,
+                                      );
+                                    },
+                                  );
+                                },
+                              ),
               ),
             ],
           ),
@@ -225,12 +312,26 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     );
   }
 
-  Future<void> _openNotification(DealRequestRecord request) async {
+  Future<void> _openNotification(
+    DealRequestRecord request,
+  ) async {
+    // Only the notification that the user actually opens
+    // is marked as read. Opening the bell itself does not
+    // clear every notification.
     await _markNotificationRead(request);
+
     if (!mounted) return;
 
     final isOwnerSide = _isOwnerSide(request);
-    final canRespond = isOwnerSide && request.status == 'REQUEST SENT';
+
+    final canRespond =
+        isOwnerSide && request.status == 'REQUEST SENT';
+
+    final requesterAccepted =
+        !isOwnerSide && request.status == 'ACCEPTED';
+
+    final requesterRejected =
+        !isOwnerSide && request.status == 'REJECTED';
 
     await showModalBottomSheet<void>(
       context: context,
@@ -240,37 +341,58 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       builder: (sheetContext) => SafeArea(
         top: false,
         child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(20, 8, 20, 26),
+          padding: const EdgeInsets.fromLTRB(
+            20,
+            8,
+            20,
+            26,
+          ),
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment:
+                CrossAxisAlignment.start,
             children: [
               Row(
                 children: [
                   Expanded(
                     child: Text(
-                      _notificationTitle(request, isOwnerSide),
-                      style: Theme.of(sheetContext).textTheme.titleLarge,
+                      _notificationTitle(
+                        request,
+                        isOwnerSide,
+                      ),
+                      style: Theme.of(sheetContext)
+                          .textTheme
+                          .titleLarge,
                     ),
                   ),
-                  _RequestStatusChip(status: request.status),
+                  const SizedBox(width: 10),
+                  _RequestStatusChip(
+                    status: request.status,
+                  ),
                 ],
               ),
               const SizedBox(height: 6),
               Text(
-                _notificationDescription(request, isOwnerSide),
+                _notificationDescription(
+                  request,
+                  isOwnerSide,
+                ),
                 style: const TextStyle(
                   color: AppColors.slate,
                   height: 1.35,
                 ),
               ),
               const SizedBox(height: 18),
+
               _NotificationDetailLine(
                 label: 'Material',
                 value: request.material,
               ),
               _NotificationDetailLine(
-                label: isOwnerSide ? 'From' : 'Business',
-                value: isOwnerSide ? request.requesterName : request.owner,
+                label:
+                    isOwnerSide ? 'From' : 'Business',
+                value: isOwnerSide
+                    ? request.requesterName
+                    : request.owner,
               ),
               _NotificationDetailLine(
                 label: 'Quantity',
@@ -282,27 +404,34 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               ),
               _NotificationDetailLine(
                 label: 'Created',
-                value: _formatDateTime(request.sentAt),
+                value:
+                    _formatDateTime(request.sentAt),
               ),
+
               if (request.note.trim().isNotEmpty)
                 _NotificationDetailLine(
                   label: 'Message',
                   value: request.note,
                 ),
+
               if (request.responseNote.trim().isNotEmpty)
                 _NotificationDetailLine(
                   label: 'Response',
                   value: request.responseNote,
                 ),
+
               const SizedBox(height: 18),
+
               if (canRespond) ...[
                 const Text(
                   'Respond to this request',
-                  style: TextStyle(fontWeight: FontWeight.w700),
+                  style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
                 const SizedBox(height: 8),
                 const Text(
-                  'Accepting makes the listing unavailable to other pending requests. Declining keeps the listing active.',
+                  'Accepting reserves the listing for this request and closes competing pending requests. Declining keeps the listing available.',
                   style: TextStyle(
                     color: AppColors.slate,
                     fontSize: 12,
@@ -315,8 +444,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     Expanded(
                       child: OutlinedButton(
                         onPressed: () async {
-                          final reason = await _askRejectionReason();
-                          if (reason == null || !mounted) return;
+                          final reason =
+                              await _askRejectionReason();
+
+                          if (reason == null ||
+                              !mounted) {
+                            return;
+                          }
+
                           await _respondFromNotification(
                             sheetContext,
                             request,
@@ -324,32 +459,129 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                             reason: reason,
                           );
                         },
-                        child: const Text('Decline'),
+                        child:
+                            const Text('Decline'),
                       ),
                     ),
                     const SizedBox(width: 10),
                     Expanded(
                       child: FilledButton(
-                        onPressed: () => _respondFromNotification(
+                        onPressed: () =>
+                            _respondFromNotification(
                           sheetContext,
                           request,
                           accept: true,
                         ),
-                        child: const Text('Accept'),
+                        child:
+                            const Text('Accept'),
                       ),
                     ),
                   ],
                 ),
+              ] else if (requesterAccepted) ...[
+                _NextStepCard(
+                  icon:
+                      Icons.check_circle_outline,
+                  title: 'Match confirmed',
+                  description:
+                      '${request.owner} accepted your deal request. The listing is now matched, so the next useful step is to review the proposed price and business terms.',
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: FilledButton.icon(
+                        onPressed: () {
+                          Navigator.pop(
+                            sheetContext,
+                          );
+                          context.push(
+                            '/fair-price',
+                          );
+                        },
+                        icon: const Icon(
+                          Icons.compare_arrows,
+                        ),
+                        label: const Text(
+                          'Open FairPrice',
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child:
+                          OutlinedButton.icon(
+                        onPressed: () {
+                          Navigator.pop(
+                            sheetContext,
+                          );
+                          context.push(
+                            '/marketplace',
+                          );
+                        },
+                        icon: const Icon(
+                          Icons.storefront_outlined,
+                        ),
+                        label: const Text(
+                          'Marketplace',
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ] else if (requesterRejected) ...[
+                _NextStepCard(
+                  icon:
+                      Icons.search_outlined,
+                  title:
+                      'Continue searching',
+                  description: request
+                          .responseNote
+                          .trim()
+                          .isEmpty
+                      ? '${request.owner} declined this request. You can return to the marketplace and compare other partial matches.'
+                      : '${request.owner} declined this request. Review the response above, then return to the marketplace and compare other partial matches.',
+                ),
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  child:
+                      FilledButton.icon(
+                    onPressed: () {
+                      Navigator.pop(
+                        sheetContext,
+                      );
+                      context.push(
+                        '/marketplace',
+                      );
+                    },
+                    icon: const Icon(
+                      Icons.search_outlined,
+                    ),
+                    label: const Text(
+                      'Find another listing',
+                    ),
+                  ),
+                ),
               ] else ...[
                 SizedBox(
                   width: double.infinity,
-                  child: OutlinedButton.icon(
+                  child:
+                      OutlinedButton.icon(
                     onPressed: () {
-                      Navigator.pop(sheetContext);
-                      context.push('/marketplace');
+                      Navigator.pop(
+                        sheetContext,
+                      );
+                      context.push(
+                        '/marketplace',
+                      );
                     },
-                    icon: const Icon(Icons.storefront_outlined),
-                    label: const Text('Open Marketplace'),
+                    icon: const Icon(
+                      Icons.storefront_outlined,
+                    ),
+                    label: const Text(
+                      'Open Marketplace',
+                    ),
                   ),
                 ),
               ],
@@ -362,10 +594,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   Future<String?> _askRejectionReason() async {
     final controller = TextEditingController();
+
     final result = await showDialog<String?>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('Decline this request?'),
+        title:
+            const Text('Decline this request?'),
         content: TextField(
           controller: controller,
           autofocus: true,
@@ -374,23 +608,30 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           maxLength: 240,
           decoration: const InputDecoration(
             labelText: 'Reason (optional)',
-            hintText: 'For example: Quantity is no longer available.',
+            hintText:
+                'For example: Quantity is no longer available.',
             alignLabelWithHint: true,
           ),
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
+            onPressed: () =>
+                Navigator.pop(dialogContext),
             child: const Text('Cancel'),
           ),
           FilledButton(
             onPressed: () =>
-                Navigator.pop(dialogContext, controller.text.trim()),
-            child: const Text('Decline request'),
+                Navigator.pop(
+              dialogContext,
+              controller.text.trim(),
+            ),
+            child:
+                const Text('Decline request'),
           ),
         ],
       ),
     );
+
     controller.dispose();
     return result;
   }
@@ -407,9 +648,17 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         accept: accept,
         reason: reason,
       );
-      await ref.read(appStateProvider.notifier).refreshSupabaseData();
+
+      await ref
+          .read(appStateProvider.notifier)
+          .refreshSupabaseData();
+
       if (!mounted) return;
-      if (sheetContext.mounted) Navigator.pop(sheetContext);
+
+      if (sheetContext.mounted) {
+        Navigator.pop(sheetContext);
+      }
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
@@ -421,18 +670,30 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       );
     } catch (error) {
       if (!mounted) return;
-      final message = error is StateError ? error.message.toString() : '$error';
+
+      final message = error is StateError
+          ? error.message.toString()
+          : '$error';
+
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not update this request: $message')),
+        SnackBar(
+          content: Text(
+            'Could not update this request: $message',
+          ),
+        ),
       );
     }
   }
 
-  String _notificationTitle(DealRequestRecord request, bool isOwnerSide) {
+  String _notificationTitle(
+    DealRequestRecord request,
+    bool isOwnerSide,
+  ) {
     if (isOwnerSide) {
       return switch (request.status) {
         'REQUEST SENT' => 'New deal request',
-        'CANCELLED' => 'Deal request cancelled',
+        'CANCELLED' =>
+          'Deal request cancelled',
         'ACCEPTED' => 'Request accepted',
         'REJECTED' => 'Request closed',
         _ => 'Marketplace update',
@@ -440,14 +701,19 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     }
 
     return switch (request.status) {
-      'ACCEPTED' => 'Your deal request was accepted',
-      'REJECTED' => 'Your deal request was declined',
+      'ACCEPTED' =>
+        'Your deal request was accepted',
+      'REJECTED' =>
+        'Your deal request was declined',
       'CANCELLED' => 'Deal request cancelled',
       _ => 'Deal request sent',
     };
   }
 
-  String _notificationDescription(DealRequestRecord request, bool isOwnerSide) {
+  String _notificationDescription(
+    DealRequestRecord request,
+    bool isOwnerSide,
+  ) {
     if (isOwnerSide) {
       return switch (request.status) {
         'REQUEST SENT' =>
@@ -458,24 +724,35 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           'The request from ${request.requesterName} for ${request.material} was accepted.',
         'REJECTED' =>
           'The request from ${request.requesterName} for ${request.material} is closed.',
-        _ => 'There is an update to your ${request.material} listing.',
+        _ =>
+          'There is an update to your ${request.material} listing.',
       };
     }
 
     return switch (request.status) {
-      'ACCEPTED' => '${request.owner} accepted your request for ${request.material}.',
-      'REJECTED' => '${request.owner} declined your request for ${request.material}.',
-      'CANCELLED' => 'Your request for ${request.material} was cancelled.',
-      _ => 'Your request for ${request.material} was sent to ${request.owner}.',
+      'ACCEPTED' =>
+        '${request.owner} accepted your request for ${request.material}. The listing is now matched to an accepted request.',
+      'REJECTED' =>
+        '${request.owner} declined your request for ${request.material}.',
+      'CANCELLED' =>
+        'Your request for ${request.material} was cancelled.',
+      _ =>
+        'Your request for ${request.material} was sent to ${request.owner}.',
     };
   }
 
   String _formatDateTime(DateTime value) {
     final local = value.toLocal();
-    final day = local.day.toString().padLeft(2, '0');
-    final month = local.month.toString().padLeft(2, '0');
-    final hour = local.hour.toString().padLeft(2, '0');
-    final minute = local.minute.toString().padLeft(2, '0');
+
+    final day =
+        local.day.toString().padLeft(2, '0');
+    final month =
+        local.month.toString().padLeft(2, '0');
+    final hour =
+        local.hour.toString().padLeft(2, '0');
+    final minute =
+        local.minute.toString().padLeft(2, '0');
+
     return '$day/$month/${local.year} $hour:$minute';
   }
 
@@ -484,36 +761,43 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final state = ref.watch(appStateProvider);
     final profile = state.profile;
     final now = DateTime.now();
-    final profileReady = profile.hasRequiredProfileIdentity;
-    final hasListings = state.activeListings > 0;
+
+    final profileReady =
+        profile.hasRequiredProfileIdentity;
+    final hasListings =
+        state.activeListings > 0;
+
     final actionRoute = !profileReady
         ? '/resource-profile'
         : !hasListings
-        ? '/resource-profile'
-        : state.savedMatches == 0
-        ? '/skill-match'
-        : '/fair-price';
+            ? '/resource-profile'
+            : state.savedMatches == 0
+                ? '/skill-match'
+                : '/fair-price';
+
     final actionLabel = !profileReady
         ? 'Complete your profile'
         : !hasListings
-        ? 'Add your first listing'
-        : state.savedMatches == 0
-        ? 'Find a training match'
-        : 'Run a price check';
+            ? 'Add your first listing'
+            : state.savedMatches == 0
+                ? 'Find a training match'
+                : 'Run a price check';
+
     final actionTitle = !profileReady
         ? 'Set up your business identity'
         : !hasListings
-        ? 'Publish your first listing'
-        : state.savedMatches == 0
-        ? 'Build your team capability plan'
-        : 'Pressure-test your next quote';
+            ? 'Publish your first listing'
+            : state.savedMatches == 0
+                ? 'Build your team capability plan'
+                : 'Pressure-test your next quote';
+
     final actionDescription = !profileReady
         ? 'Add your business name and industry sector before you unlock marketplace and matching features.'
         : !hasListings
-        ? 'Publish a supply or demand listing so your business becomes discoverable in the local marketplace.'
-        : state.savedMatches == 0
-        ? 'Describe a workforce need and save a shortlist of suitable programmes.'
-        : 'Use the benchmark-led advisor before you commit to a material price.';
+            ? 'Publish a supply or demand listing so your business becomes discoverable in the local marketplace.'
+            : state.savedMatches == 0
+                ? 'Describe a workforce need and save a shortlist of suitable programmes.'
+                : 'Use the benchmark-led advisor before you commit to a material price.';
 
     return AppShell(
       title: 'IndustryHub',
@@ -524,15 +808,19 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             child: SizedBox(
               width: 18,
               height: 18,
-              child: CircularProgressIndicator(strokeWidth: 2),
+              child:
+                  CircularProgressIndicator(
+                strokeWidth: 2,
+              ),
             ),
           )
         else
           IconButton(
             tooltip: 'Refresh workspace',
-            onPressed: () =>
-                ref.read(appStateProvider.notifier).refreshSupabaseData(),
-            icon: const Icon(Icons.refresh_outlined),
+            onPressed: _refreshHome,
+            icon: const Icon(
+              Icons.refresh_outlined,
+            ),
           ),
         IconButton(
           tooltip: _unreadCount == 0
@@ -541,143 +829,256 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           onPressed: _showNotificationCentre,
           icon: Badge.count(
             count: _unreadCount,
-            isLabelVisible: _unreadCount > 0,
+            isLabelVisible:
+                _unreadCount > 0,
             backgroundColor: Colors.red,
             textColor: Colors.white,
-            child: const Icon(Icons.notifications_outlined),
+            child: const Icon(
+              Icons.notifications_outlined,
+            ),
           ),
         ),
         IconButton(
           tooltip: 'Open business profile',
-          onPressed: () => context.go('/resource-profile'),
-          icon: const Icon(Icons.account_circle_outlined),
+          onPressed: () =>
+              context.go(
+            '/resource-profile',
+          ),
+          icon: const Icon(
+            Icons.account_circle_outlined,
+          ),
         ),
         IconButton(
           tooltip: 'Sign out',
           onPressed: _signOut,
-          icon: const Icon(Icons.logout_outlined),
+          icon: const Icon(
+            Icons.logout_outlined,
+          ),
         ),
         const SizedBox(width: 6),
       ],
-      bottomNavigationBar: const _HomeNavigationBar(currentIndex: 0),
+      bottomNavigationBar:
+          const _HomeNavigationBar(
+        currentIndex: 0,
+      ),
       body: RefreshIndicator(
-        onRefresh: () async {
-          await ref.read(appStateProvider.notifier).refreshSupabaseData();
-          _subscribeToNotifications();
-        },
+        onRefresh: _refreshHome,
         child: ListView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.fromLTRB(20, 22, 20, 30),
+          physics:
+              const AlwaysScrollableScrollPhysics(),
+          padding:
+              const EdgeInsets.fromLTRB(
+            20,
+            22,
+            20,
+            30,
+          ),
           children: [
-            Eyebrow(_formatDate(now)),
+            Eyebrow(
+              _formatDate(now),
+            ),
             const SizedBox(height: 8),
             Text(
               '${_greeting(now)},',
-              style: Theme.of(context).textTheme.displayLarge,
+              style: Theme.of(context)
+                  .textTheme
+                  .displayLarge,
             ),
             Text(
               '${profile.businessName}.',
-              style: Theme.of(context).textTheme.displayLarge,
+              style: Theme.of(context)
+                  .textTheme
+                  .displayLarge,
             ),
             const SizedBox(height: 20),
+
             MetricStrip(
               metrics: [
-                MapEntry('active listings', _twoDigits(state.activeListings)),
+                MapEntry(
+                  'active listings',
+                  _twoDigits(
+                    state.activeListings,
+                  ),
+                ),
                 MapEntry(
                   'negotiations in progress',
-                  _twoDigits(state.negotiations),
+                  _twoDigits(
+                    state.negotiations,
+                  ),
                 ),
                 MapEntry(
                   'training matches saved',
-                  _twoDigits(state.savedMatches),
+                  _twoDigits(
+                    state.savedMatches,
+                  ),
                 ),
               ],
             ),
+
             if (_unreadCount > 0) ...[
               const SizedBox(height: 14),
               InkWell(
-                onTap: _showNotificationCentre,
-                borderRadius: BorderRadius.circular(8),
+                onTap:
+                    _showNotificationCentre,
+                borderRadius:
+                    BorderRadius.circular(8),
                 child: Container(
-                  padding: const EdgeInsets.all(13),
+                  padding:
+                      const EdgeInsets.all(
+                    13,
+                  ),
                   decoration: BoxDecoration(
-                    color: Colors.red.withValues(alpha: 0.06),
-                    border: Border.all(
-                      color: Colors.red.withValues(alpha: 0.22),
+                    color: Colors.red
+                        .withValues(
+                      alpha: 0.06,
                     ),
-                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: Colors.red
+                          .withValues(
+                        alpha: 0.22,
+                      ),
+                    ),
+                    borderRadius:
+                        BorderRadius.circular(
+                      8,
+                    ),
                   ),
                   child: Row(
                     children: [
                       Badge.count(
-                        count: _unreadCount,
-                        backgroundColor: Colors.red,
-                        textColor: Colors.white,
-                        child: const Icon(Icons.notifications_active_outlined),
+                        count:
+                            _unreadCount,
+                        backgroundColor:
+                            Colors.red,
+                        textColor:
+                            Colors.white,
+                        child: const Icon(
+                          Icons
+                              .notifications_active_outlined,
+                        ),
                       ),
-                      const SizedBox(width: 12),
+                      const SizedBox(
+                        width: 12,
+                      ),
                       Expanded(
                         child: Text(
                           'You have $_unreadCount unread marketplace ${_unreadCount == 1 ? 'notification' : 'notifications'}.',
-                          style: const TextStyle(fontWeight: FontWeight.w700),
+                          style:
+                              const TextStyle(
+                            fontWeight:
+                                FontWeight.w700,
+                          ),
                         ),
                       ),
-                      const Icon(Icons.chevron_right),
+                      const Icon(
+                        Icons.chevron_right,
+                      ),
                     ],
                   ),
                 ),
               ),
             ],
+
             const SizedBox(height: 18),
+
             Card(
               child: Padding(
-                padding: const EdgeInsets.all(16),
+                padding:
+                    const EdgeInsets.all(
+                  16,
+                ),
                 child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                  crossAxisAlignment:
+                      CrossAxisAlignment.start,
                   children: [
                     Container(
-                      padding: const EdgeInsets.all(9),
-                      decoration: BoxDecoration(
-                        color: AppColors.amber.withValues(alpha: 0.14),
-                        borderRadius: BorderRadius.circular(8),
+                      padding:
+                          const EdgeInsets.all(
+                        9,
+                      ),
+                      decoration:
+                          BoxDecoration(
+                        color: AppColors.amber
+                            .withValues(
+                          alpha: 0.14,
+                        ),
+                        borderRadius:
+                            BorderRadius
+                                .circular(8),
                       ),
                       child: const Icon(
                         Icons.north_east,
-                        color: AppColors.amber,
+                        color:
+                            AppColors.amber,
                         size: 20,
                       ),
                     ),
-                    const SizedBox(width: 12),
+                    const SizedBox(
+                      width: 12,
+                    ),
                     Expanded(
                       child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                        crossAxisAlignment:
+                            CrossAxisAlignment
+                                .start,
                         children: [
                           const Eyebrow(
                             'RECOMMENDED NEXT MOVE',
-                            color: AppColors.amber,
+                            color: AppColors
+                                .amber,
                           ),
-                          const SizedBox(height: 6),
+                          const SizedBox(
+                            height: 6,
+                          ),
                           Text(
                             actionTitle,
-                            style: Theme.of(context).textTheme.titleMedium,
+                            style: Theme.of(
+                              context,
+                            )
+                                .textTheme
+                                .titleMedium,
                           ),
-                          const SizedBox(height: 4),
+                          const SizedBox(
+                            height: 4,
+                          ),
                           Text(
                             actionDescription,
-                            style: Theme.of(context).textTheme.bodyMedium
+                            style: Theme.of(
+                              context,
+                            )
+                                .textTheme
+                                .bodyMedium
                                 ?.copyWith(
-                                  color: AppColors.slate,
-                                  height: 1.35,
+                                  color:
+                                      AppColors
+                                          .slate,
+                                  height:
+                                      1.35,
                                 ),
                           ),
-                          const SizedBox(height: 10),
+                          const SizedBox(
+                            height: 10,
+                          ),
                           TextButton.icon(
-                            onPressed: () => context.push(actionRoute),
-                            style: TextButton.styleFrom(
-                              padding: EdgeInsets.zero,
+                            onPressed: () =>
+                                context.push(
+                              actionRoute,
                             ),
-                            icon: const Icon(Icons.arrow_forward, size: 16),
-                            label: Text(actionLabel),
+                            style: TextButton
+                                .styleFrom(
+                              padding:
+                                  EdgeInsets
+                                      .zero,
+                            ),
+                            icon:
+                                const Icon(
+                              Icons
+                                  .arrow_forward,
+                              size: 16,
+                            ),
+                            label: Text(
+                              actionLabel,
+                            ),
                           ),
                         ],
                       ),
@@ -686,72 +1087,122 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 ),
               ),
             ),
+
             const SizedBox(height: 26),
-            const SpecDivider(label: 'OPERATIONS CONSOLE'),
+            const SpecDivider(
+              label:
+                  'OPERATIONS CONSOLE',
+            ),
             const SizedBox(height: 16),
+
             ModuleCard(
-              eyebrow: 'M1 / SKILLMATCH AI',
+              eyebrow:
+                  'M1 / SKILLMATCH AI',
               title: 'Skill Advisor',
               description:
                   'Turn a hiring or upskilling need into a ranked shortlist of local programmes.',
-              icon: Icons.psychology_outlined,
-              onTap: () => context.push('/skill-match'),
+              icon:
+                  Icons.psychology_outlined,
+              onTap: () =>
+                  context.push(
+                '/skill-match',
+              ),
             ),
+
             const SizedBox(height: 12),
+
             ModuleCard(
               eyebrow: 'M2 / FAIRPRICE',
               title: 'Price Advisor',
               description:
                   'Pressure-test a proposed price with a transparent, benchmark-led negotiation.',
-              icon: Icons.compare_arrows,
+              icon:
+                  Icons.compare_arrows,
               accent: AppColors.amber,
-              onTap: () => context.push('/fair-price'),
+              onTap: () =>
+                  context.push(
+                '/fair-price',
+              ),
             ),
+
             const SizedBox(height: 12),
+
             ModuleCard(
-              eyebrow: 'M3 / RESOURCE PROFILES',
-              title: 'My Profile & Listings',
+              eyebrow:
+                  'M3 / RESOURCE PROFILES',
+              title:
+                  'My Profile & Listings',
               description:
                   'Keep your business profile verified and manage the materials you can supply or need.',
-              icon: Icons.badge_outlined,
+              icon:
+                  Icons.badge_outlined,
               accent: AppColors.green,
-              onTap: () => context.push('/resource-profile'),
+              onTap: () =>
+                  context.push(
+                '/resource-profile',
+              ),
             ),
+
             const SizedBox(height: 12),
+
             ModuleCard(
-              eyebrow: 'M4 / MARKETPLACE',
-              title: 'ReSource Marketplace',
+              eyebrow:
+                  'M4 / MARKETPLACE',
+              title:
+                  'ReSource Marketplace',
               description:
                   'Browse nearby industrial materials and move from discovery to a deal request.',
-              icon: Icons.storefront_outlined,
+              icon:
+                  Icons.storefront_outlined,
               accent: AppColors.rust,
-              onTap: () => context.push('/marketplace'),
+              onTap: () =>
+                  context.push(
+                '/marketplace',
+              ),
             ),
+
             const SizedBox(height: 24),
+
             Card(
               child: Padding(
-                padding: const EdgeInsets.all(16),
+                padding:
+                    const EdgeInsets.all(
+                  16,
+                ),
                 child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                  crossAxisAlignment:
+                      CrossAxisAlignment.start,
                   children: [
                     Icon(
                       state.isLoading
-                          ? Icons.sync_outlined
-                          : Icons.cloud_done_outlined,
+                          ? Icons
+                              .sync_outlined
+                          : Icons
+                              .cloud_done_outlined,
                       color: state.isLoading
                           ? AppColors.amber
                           : AppColors.green,
                     ),
-                    const SizedBox(width: 12),
+                    const SizedBox(
+                      width: 12,
+                    ),
                     Expanded(
                       child: Text(
                         state.isLoading
                             ? 'Refreshing your workspace records from Supabase.'
                             : 'Your profile, listings, deal requests and notification state are synchronised with Supabase.',
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: AppColors.slate,
-                          height: 1.4,
-                        ),
+                        style: Theme.of(
+                          context,
+                        )
+                            .textTheme
+                            .bodyMedium
+                            ?.copyWith(
+                              color:
+                                  AppColors
+                                      .slate,
+                              height:
+                                  1.4,
+                            ),
                       ),
                     ),
                   ],
@@ -764,11 +1215,18 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     );
   }
 
-  static String _twoDigits(int value) => value.toString().padLeft(2, '0');
+  static String _twoDigits(int value) =>
+      value.toString().padLeft(2, '0');
 
   static String _greeting(DateTime date) {
-    if (date.hour < 12) return 'Good morning';
-    if (date.hour < 18) return 'Good afternoon';
+    if (date.hour < 12) {
+      return 'Good morning';
+    }
+
+    if (date.hour < 18) {
+      return 'Good afternoon';
+    }
+
     return 'Good evening';
   }
 
@@ -782,6 +1240,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       'Saturday',
       'Sunday',
     ];
+
     const months = [
       'JAN',
       'FEB',
@@ -796,6 +1255,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       'NOV',
       'DEC',
     ];
+
     return '${weekdays[date.weekday - 1].toUpperCase()} / ${date.day.toString().padLeft(2, '0')} ${months[date.month - 1]} ${date.year}';
   }
 }
@@ -817,35 +1277,56 @@ class _NotificationTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final title = isOwnerSide
         ? switch (request.status) {
-            'REQUEST SENT' => 'New request from ${request.requesterName}',
-            'CANCELLED' => '${request.requesterName} cancelled a request',
-            'ACCEPTED' => 'Accepted request from ${request.requesterName}',
-            'REJECTED' => 'Closed request from ${request.requesterName}',
+            'REQUEST SENT' =>
+              'New request from ${request.requesterName}',
+            'CANCELLED' =>
+              '${request.requesterName} cancelled a request',
+            'ACCEPTED' =>
+              'Accepted request from ${request.requesterName}',
+            'REJECTED' =>
+              'Closed request from ${request.requesterName}',
             _ => 'Marketplace update',
           }
         : switch (request.status) {
-            'ACCEPTED' => '${request.owner} accepted your request',
-            'REJECTED' => '${request.owner} declined your request',
-            'CANCELLED' => 'Your request was cancelled',
-            _ => 'Request sent to ${request.owner}',
+            'ACCEPTED' =>
+              '${request.owner} accepted your request',
+            'REJECTED' =>
+              '${request.owner} declined your request',
+            'CANCELLED' =>
+              'Your request was cancelled',
+            _ =>
+              'Request sent to ${request.owner}',
           };
 
     return Material(
-      color: unread ? AppColors.white : Colors.transparent,
-      borderRadius: BorderRadius.circular(8),
+      color: unread
+          ? AppColors.white
+          : Colors.transparent,
+      borderRadius:
+          BorderRadius.circular(8),
       child: ListTile(
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(8),
+          borderRadius:
+              BorderRadius.circular(8),
           side: BorderSide(
-            color: unread ? AppColors.line : Colors.transparent,
+            color: unread
+                ? AppColors.line
+                : Colors.transparent,
           ),
         ),
         leading: Stack(
           clipBehavior: Clip.none,
           children: [
             CircleAvatar(
-              backgroundColor: AppColors.navy.withValues(alpha: 0.08),
-              child: const Icon(Icons.handshake_outlined, color: AppColors.navy),
+              backgroundColor:
+                  AppColors.navy
+                      .withValues(
+                alpha: 0.08,
+              ),
+              child: const Icon(
+                Icons.handshake_outlined,
+                color: AppColors.navy,
+              ),
             ),
             if (unread)
               const Positioned(
@@ -853,7 +1334,8 @@ class _NotificationTile extends StatelessWidget {
                 top: -1,
                 child: CircleAvatar(
                   radius: 5,
-                  backgroundColor: Colors.red,
+                  backgroundColor:
+                      Colors.red,
                 ),
               ),
           ],
@@ -861,25 +1343,40 @@ class _NotificationTile extends StatelessWidget {
         title: Text(
           title,
           maxLines: 2,
-          overflow: TextOverflow.ellipsis,
-          style: TextStyle(fontWeight: unread ? FontWeight.w700 : FontWeight.w500),
+          overflow:
+              TextOverflow.ellipsis,
+          style: TextStyle(
+            fontWeight: unread
+                ? FontWeight.w700
+                : FontWeight.w500,
+          ),
         ),
         subtitle: Text(
           '${request.material} · ${request.quantity}\nTap to view details${isOwnerSide && request.status == 'REQUEST SENT' ? ' and respond' : ''}',
           maxLines: 2,
-          overflow: TextOverflow.ellipsis,
-          style: const TextStyle(color: AppColors.slate, fontSize: 12),
+          overflow:
+              TextOverflow.ellipsis,
+          style: const TextStyle(
+            color: AppColors.slate,
+            fontSize: 12,
+          ),
         ),
         isThreeLine: true,
-        trailing: const Icon(Icons.chevron_right),
+        trailing:
+            const Icon(
+          Icons.chevron_right,
+        ),
         onTap: onTap,
       ),
     );
   }
 }
 
-class _RequestStatusChip extends StatelessWidget {
-  const _RequestStatusChip({required this.status});
+class _RequestStatusChip
+    extends StatelessWidget {
+  const _RequestStatusChip({
+    required this.status,
+  });
 
   final String status;
 
@@ -887,41 +1384,130 @@ class _RequestStatusChip extends StatelessWidget {
   Widget build(BuildContext context) {
     final color = switch (status) {
       'ACCEPTED' => AppColors.green,
-      'REJECTED' || 'CANCELLED' => AppColors.rust,
+      'REJECTED' || 'CANCELLED' =>
+        AppColors.rust,
       _ => AppColors.amber,
     };
-    return StatusChip(label: status, color: color);
+
+    return StatusChip(
+      label: status,
+      color: color,
+    );
   }
 }
 
-class _NotificationDetailLine extends StatelessWidget {
-  const _NotificationDetailLine({required this.label, required this.value});
+class _NotificationDetailLine
+    extends StatelessWidget {
+  const _NotificationDetailLine({
+    required this.label,
+    required this.value,
+  });
 
   final String label;
   final String value;
 
   @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.only(bottom: 10),
-    child: Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        SizedBox(
-          width: 82,
-          child: Text(
-            label,
-            style: const TextStyle(color: AppColors.slate, fontSize: 12),
-          ),
+  Widget build(BuildContext context) =>
+      Padding(
+        padding:
+            const EdgeInsets.only(
+          bottom: 10,
         ),
-        Expanded(
-          child: Text(value, style: const TextStyle(height: 1.35)),
+        child: Row(
+          crossAxisAlignment:
+              CrossAxisAlignment.start,
+          children: [
+            SizedBox(
+              width: 82,
+              child: Text(
+                label,
+                style: const TextStyle(
+                  color:
+                      AppColors.slate,
+                  fontSize: 12,
+                ),
+              ),
+            ),
+            Expanded(
+              child: Text(
+                value,
+                style:
+                    const TextStyle(
+                  height: 1.35,
+                ),
+              ),
+            ),
+          ],
         ),
-      ],
-    ),
-  );
+      );
 }
 
-class _NotificationEmptyState extends StatelessWidget {
+class _NextStepCard extends StatelessWidget {
+  const _NextStepCard({
+    required this.icon,
+    required this.title,
+    required this.description,
+  });
+
+  final IconData icon;
+  final String title;
+  final String description;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.white,
+        border: Border.all(
+          color: AppColors.line,
+        ),
+        borderRadius:
+            BorderRadius.circular(8),
+      ),
+      child: Row(
+        crossAxisAlignment:
+            CrossAxisAlignment.start,
+        children: [
+          Icon(
+            icon,
+            color: AppColors.green,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment:
+                  CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontWeight:
+                        FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  description,
+                  style: const TextStyle(
+                    color:
+                        AppColors.slate,
+                    fontSize: 12,
+                    height: 1.35,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _NotificationEmptyState
+    extends StatelessWidget {
   const _NotificationEmptyState({
     required this.icon,
     required this.title,
@@ -936,18 +1522,33 @@ class _NotificationEmptyState extends StatelessWidget {
   Widget build(BuildContext context) {
     return Center(
       child: Padding(
-        padding: const EdgeInsets.all(28),
+        padding:
+            const EdgeInsets.all(28),
         child: Column(
-          mainAxisSize: MainAxisSize.min,
+          mainAxisSize:
+              MainAxisSize.min,
           children: [
-            Icon(icon, size: 34, color: AppColors.slate),
+            Icon(
+              icon,
+              size: 34,
+              color: AppColors.slate,
+            ),
             const SizedBox(height: 12),
-            Text(title, style: Theme.of(context).textTheme.titleMedium),
+            Text(
+              title,
+              style: Theme.of(context)
+                  .textTheme
+                  .titleMedium,
+            ),
             const SizedBox(height: 6),
             Text(
               description,
-              textAlign: TextAlign.center,
-              style: const TextStyle(color: AppColors.slate, height: 1.35),
+              textAlign:
+                  TextAlign.center,
+              style: const TextStyle(
+                color: AppColors.slate,
+                height: 1.35,
+              ),
             ),
           ],
         ),
@@ -956,8 +1557,12 @@ class _NotificationEmptyState extends StatelessWidget {
   }
 }
 
-class _HomeNavigationBar extends StatelessWidget {
-  const _HomeNavigationBar({required this.currentIndex});
+class _HomeNavigationBar
+    extends StatelessWidget {
+  const _HomeNavigationBar({
+    required this.currentIndex,
+  });
+
   final int currentIndex;
 
   @override
@@ -965,24 +1570,41 @@ class _HomeNavigationBar extends StatelessWidget {
     return NavigationBar(
       selectedIndex: currentIndex,
       onDestinationSelected: (index) {
-        if (index == 0) context.go('/home');
-        if (index == 1) context.go('/marketplace');
-        if (index == 2) context.go('/resource-profile');
+        if (index == 0) {
+          context.go('/home');
+        }
+
+        if (index == 1) {
+          context.go('/marketplace');
+        }
+
+        if (index == 2) {
+          context.go(
+            '/resource-profile',
+          );
+        }
       },
       destinations: const [
         NavigationDestination(
-          icon: Icon(Icons.grid_view_outlined),
-          selectedIcon: Icon(Icons.grid_view),
+          icon:
+              Icon(Icons.grid_view_outlined),
+          selectedIcon:
+              Icon(Icons.grid_view),
           label: 'Console',
         ),
         NavigationDestination(
-          icon: Icon(Icons.storefront_outlined),
-          selectedIcon: Icon(Icons.storefront),
+          icon: Icon(
+            Icons.storefront_outlined,
+          ),
+          selectedIcon:
+              Icon(Icons.storefront),
           label: 'Market',
         ),
         NavigationDestination(
-          icon: Icon(Icons.person_outline),
-          selectedIcon: Icon(Icons.person),
+          icon:
+              Icon(Icons.person_outline),
+          selectedIcon:
+              Icon(Icons.person),
           label: 'Profile',
         ),
       ],
