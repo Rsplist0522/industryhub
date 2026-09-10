@@ -81,8 +81,8 @@ class HomeScreen extends ConsumerWidget {
             icon: const Icon(Icons.refresh_outlined),
           ),
         IconButton(
-          tooltip: 'Open business profile',
-          onPressed: () => context.go('/resource-profile'),
+          tooltip: 'Open account',
+          onPressed: () => context.go('/user-profile'),
           icon: const Icon(Icons.account_circle_outlined),
         ),
         IconButton(
@@ -307,7 +307,7 @@ class _HomeNavigationBar extends StatelessWidget {
       onDestinationSelected: (index) {
         if (index == 0) context.go('/home');
         if (index == 1) context.go('/marketplace');
-        if (index == 2) context.go('/resource-profile');
+        if (index == 2) context.go('/user-profile');
       },
       destinations: const [
         NavigationDestination(

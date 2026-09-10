@@ -86,6 +86,10 @@ class CompanyProfile {
     this.verified = false,
     this.msicCode,
     this.msicDescription,
+    this.avatarUrl,
+    this.contactName,
+    this.contactEmail,
+    this.contactPhone,
   });
 
   final String businessName;
@@ -94,6 +98,14 @@ class CompanyProfile {
   final bool verified;
   final String? msicCode;
   final String? msicDescription;
+
+  // Optional additional profile fields used for the separate "User Profile"
+  // view. These are read from the Supabase profile row when present but are
+  // optional so they won't break existing migrations.
+  final String? avatarUrl;
+  final String? contactName;
+  final String? contactEmail;
+  final String? contactPhone;
 
   bool get hasRequiredProfileIdentity =>
       businessName.trim().isNotEmpty && sector.trim().isNotEmpty;
@@ -106,6 +118,10 @@ class CompanyProfile {
         verified: data['verified'] as bool? ?? false,
         msicCode: data['msic_code'] as String?,
         msicDescription: data['msic_description'] as String?,
+        avatarUrl: data['avatar_url'] as String?,
+        contactName: data['contact_name'] as String?,
+        contactEmail: data['contact_email'] as String?,
+        contactPhone: data['contact_phone'] as String?,
       );
 
   CompanyProfile copyWith({
@@ -115,6 +131,10 @@ class CompanyProfile {
     bool? verified,
     String? msicCode,
     String? msicDescription,
+    String? avatarUrl,
+    String? contactName,
+    String? contactEmail,
+    String? contactPhone,
   }) => CompanyProfile(
     businessName: businessName ?? this.businessName,
     sector: sector ?? this.sector,
@@ -122,6 +142,10 @@ class CompanyProfile {
     verified: verified ?? this.verified,
     msicCode: msicCode ?? this.msicCode,
     msicDescription: msicDescription ?? this.msicDescription,
+    avatarUrl: avatarUrl ?? this.avatarUrl,
+    contactName: contactName ?? this.contactName,
+    contactEmail: contactEmail ?? this.contactEmail,
+    contactPhone: contactPhone ?? this.contactPhone,
   );
 }
 
@@ -269,6 +293,10 @@ class IndustryHubNotifier extends Notifier<IndustryHubState> {
     String? msicCode,
     String? msicDescription,
     bool clearMsic = false,
+    String? contactName,
+    String? contactEmail,
+    String? contactPhone,
+    String? avatarUrl,
   }) async {
     final user = await _ensureSignedInUser();
     if (user == null) throw StateError('Sign in before updating your profile.');
@@ -292,18 +320,28 @@ class IndustryHubNotifier extends Notifier<IndustryHubState> {
           : (msicDescription?.trim().isNotEmpty == true
                 ? msicDescription!.trim()
                 : state.profile.msicDescription),
+      avatarUrl: avatarUrl ?? state.profile.avatarUrl,
+      contactName: contactName ?? state.profile.contactName,
+      contactEmail: contactEmail ?? state.profile.contactEmail,
+      contactPhone: contactPhone ?? state.profile.contactPhone,
     );
 
     try {
+      final updateMap = {
+        'business_name': updatedProfile.businessName,
+        'sector': updatedProfile.sector,
+        'role': updatedProfile.role,
+        'msic_code': updatedProfile.msicCode,
+        'msic_description': updatedProfile.msicDescription,
+        'avatar_url': updatedProfile.avatarUrl,
+        'contact_name': updatedProfile.contactName,
+        'contact_email': updatedProfile.contactEmail,
+        'contact_phone': updatedProfile.contactPhone,
+      };
+
       await _supabase
           .from('profiles')
-          .update({
-            'business_name': updatedProfile.businessName,
-            'sector': updatedProfile.sector,
-            'role': updatedProfile.role,
-            'msic_code': updatedProfile.msicCode,
-            'msic_description': updatedProfile.msicDescription,
-          })
+          .update(updateMap)
           .eq('user_id', user.id);
 
       var updatedListings = state.listings;

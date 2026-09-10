@@ -74,6 +74,7 @@ abstract final class AppTheme {
         ),
         labelStyle: GoogleFonts.ibmPlexSans(color: AppColors.slate),
         hintStyle: GoogleFonts.ibmPlexSans(color: AppColors.slate),
+        errorMaxLines: 3,
       ),
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(

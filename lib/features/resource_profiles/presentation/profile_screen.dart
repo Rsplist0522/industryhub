@@ -12,6 +12,77 @@ import '../../../core/widgets.dart';
 import '../../../core/validators.dart';
 import '../data/msic_repository.dart';
 
+// Listing helper constants and validators for Add/Edit dialogs.
+const List<String> _suggestedMaterials = [
+  'Sawdust',
+  'Wood offcuts',
+  'Scrap metal',
+  'Aluminium offcuts',
+  'Plastic scraps',
+  'Cardboard',
+  'Used pallets',
+  'Textile offcuts',
+];
+
+const List<String> _integerUnits = ['pieces', 'bags', 'boxes', 'pallets', 'drums', 'rolls', 'sheets', 'bundles'];
+const List<String> _allUnits = [
+  'g',
+  'kg',
+  'tonnes',
+  'L',
+  'm³',
+  'pieces',
+  'bags',
+  'boxes',
+  'pallets',
+  'drums',
+  'rolls',
+  'sheets',
+  'bundles',
+];
+
+String? _materialValidator(String? value) {
+  final text = value?.trim() ?? '';
+  if (text.isEmpty) return 'Enter a material or by-product.';
+  if (text.length < 2) return 'Material name must be at least 2 characters.';
+  if (text.length > 120) return 'Material name cannot exceed 120 characters.';
+  if (!RegExp(r'[A-Za-z]').hasMatch(text)) return 'Enter a valid material or by-product name.';
+  return null;
+}
+
+String? _quantityValidator(String? value, String unit) {
+  final text = value?.trim() ?? '';
+  if (text.isEmpty) return 'Enter a quantity.';
+  final num? parsed = double.tryParse(text);
+  if (parsed == null || !parsed.isFinite) return 'Enter a valid number.';
+  if (parsed <= 0) return 'Quantity must be greater than 0.';
+  if (_integerUnits.contains(unit)) {
+    if (parsed % 1 != 0) return 'Use a whole number for $unit.';
+  }
+  return null;
+}
+
+String? _priceValidator(String? value) {
+  final text = value?.trim() ?? '';
+  if (text.isEmpty) return null;
+  final num? parsed = double.tryParse(text);
+  if (parsed == null || !parsed.isFinite) return 'Enter a valid price.';
+  if (parsed < 0) return 'Price must be zero or greater.';
+  return null;
+}
+
+String? _cityValidator(String? value) {
+  final text = value?.trim() ?? '';
+  if (text.isEmpty) return null; // optional
+  if (text.length > 80) return 'City/District cannot exceed 80 characters.';
+  // keep validation permissive: only enforce max length; accept any user-provided city/district text
+  return null;
+}
+
+const List<String> _malaysiaStates = [
+  'Johor', 'Kedah', 'Kelantan', 'Melaka', 'Negeri Sembilan', 'Pahang', 'Perak', 'Perlis', 'Pulau Pinang', 'Sabah', 'Sarawak', 'Selangor', 'Terengganu', 'Kuala Lumpur', 'Labuan', 'Putrajaya'
+];
+
 class ProfileScreen extends ConsumerStatefulWidget {
   const ProfileScreen({super.key});
 
@@ -363,166 +434,330 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
 
     final material = TextEditingController();
     final quantity = TextEditingController();
-    final location = TextEditingController();
+    final city = TextEditingController();
     final description = TextEditingController();
     final askingPricePerKg = TextEditingController();
     final formKey = GlobalKey<FormState>();
     var type = 'supply';
     var unit = 'kg';
+    String selectedState = _malaysiaStates.first;
 
-    final draft = await showDialog<_ListingDraft>(
-      context: context,
-      builder: (dialogContext) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: const Text('Add resource listing'),
-          content: SingleChildScrollView(
-            child: Form(
-              key: formKey,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Text(
-                    'This listing will be saved to your Supabase workspace and shown in ReSource Marketplace.',
-                    style: TextStyle(
-                      color: AppColors.slate,
-                      fontSize: 12,
-                      height: 1.35,
-                    ),
-                  ),
-                  const SizedBox(height: 14),
-                  DropdownButtonFormField<String>(
-                    initialValue: type,
-                    decoration: const InputDecoration(
-                      labelText: 'Listing type',
-                    ),
-                    items: const [
-                      DropdownMenuItem(
-                        value: 'supply',
-                        child: Text('I can supply'),
-                      ),
-                      DropdownMenuItem(
-                        value: 'demand',
-                        child: Text('I need to buy'),
-                      ),
-                    ],
-                    onChanged: (value) =>
-                        setDialogState(() => type = value ?? type),
-                  ),
-                  const SizedBox(height: 12),
-                  TextFormField(
-                    controller: material,
-                    maxLength: 120,
-                    decoration: const InputDecoration(
-                      labelText: 'Material or by-product',
-                    ),
-                    validator: (value) => validateRequiredText(
-                      value,
-                      label: 'a material or by-product',
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextFormField(
-                          controller: quantity,
-                          keyboardType: const TextInputType.numberWithOptions(
-                            decimal: true,
-                          ),
-                          decoration: InputDecoration(
-                            labelText: 'Quantity ($unit)',
-                          ),
-                          validator: _positiveQuantity,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: DropdownButtonFormField<String>(
-                          initialValue: unit,
-                          decoration: const InputDecoration(labelText: 'Unit'),
-                          items: const [
-                            DropdownMenuItem(value: 'kg', child: Text('kg')),
-                            DropdownMenuItem(
-                              value: 'tonnes',
-                              child: Text('tonnes'),
+        // per-field focus and touched state for progressive validation
+        final materialFocus = FocusNode();
+        final quantityFocus = FocusNode();
+        final priceFocus = FocusNode();
+        final cityFocus = FocusNode();
+        final descriptionFocus = FocusNode();
+
+        var touchedMaterial = false;
+        var touchedQuantity = false;
+        var touchedPrice = false;
+        var touchedCity = false;
+        var touchedDescription = false;
+
+        // per-field "changed by user" flags
+        var materialChanged = false;
+        var quantityChanged = false;
+        var priceChanged = false;
+        var cityChanged = false;
+        var descriptionChanged = false;
+
+        // listener attached guards
+        var quantityListenerAttached = false;
+        var priceListenerAttached = false;
+        var cityListenerAttached = false;
+        var descriptionListenerAttached = false;
+
+        final draft = await showDialog<_ListingDraft>(
+          context: context,
+          builder: (dialogContext) => StatefulBuilder(
+            builder: (context, setDialogState) => AlertDialog(
+              title: const Text('Add resource listing'),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Form(
+                      key: formKey,
+                      autovalidateMode: AutovalidateMode.disabled,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Text(
+                            'This listing will be saved to your Supabase workspace and shown in ReSource Marketplace.',
+                            style: TextStyle(
+                              color: AppColors.slate,
+                              fontSize: 12,
+                              height: 1.35,
                             ),
-                            DropdownMenuItem(
-                              value: 'pieces',
-                              child: Text('pieces'),
+                          ),
+                          const SizedBox(height: 14),
+                          DropdownButtonFormField<String>(
+                            initialValue: type,
+                            decoration: const InputDecoration(
+                              labelText: 'Listing type',
                             ),
-                          ],
-                          onChanged: (value) =>
-                              setDialogState(() => unit = value ?? unit),
-                        ),
+                            items: const [
+                              DropdownMenuItem(
+                                value: 'supply',
+                                child: Text('I can supply'),
+                              ),
+                              DropdownMenuItem(
+                                value: 'demand',
+                                child: Text('I need to buy'),
+                              ),
+                            ],
+                            onChanged: (value) => setDialogState(() => type = value ?? type),
+                          ),
+                          const SizedBox(height: 12),
+
+                          // Material with simple autocomplete suggestions
+                          Autocomplete<String>(
+                            optionsBuilder: (TextEditingValue textEditingValue) {
+                              final input = textEditingValue.text.trim();
+                              if (input.isEmpty) return const Iterable<String>.empty();
+                              return _suggestedMaterials.where((s) => s.toLowerCase().contains(input.toLowerCase()));
+                            },
+                            fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
+                              if (controller.text != material.text) {
+                                controller.text = material.text;
+                                controller.selection = TextSelection.fromPosition(TextPosition(offset: controller.text.length));
+                              }
+                              controller.addListener(() {
+                                // mark changed when user alters the controller value
+                                if (!materialChanged && controller.text != (material.text)) {
+                                  materialChanged = true;
+                                }
+                                material.text = controller.text;
+                                // show error only if user has changed text and the value is invalid
+                                if (materialChanged && _materialValidator(controller.text) != null) {
+                                  setDialogState(() => touchedMaterial = true);
+                                }
+                              });
+                              // attach listener to the persistent focus node used for final focus handling
+                              materialFocus.addListener(() {
+                                if (!materialFocus.hasFocus) {
+                                  if (_materialValidator(material.text) != null) setDialogState(() => touchedMaterial = true);
+                                }
+                              });
+                              return TextFormField(
+                                controller: controller,
+                                focusNode: materialFocus,
+                                maxLength: 120,
+                                decoration: InputDecoration(
+                                  labelText: 'Material or by-product',
+                                  errorMaxLines: 2,
+                                  errorText: (touchedMaterial && materialChanged) ? _materialValidator(material.text) : null,
+                                ),
+                              );
+                            },
+                            onSelected: (selection) => material.text = selection,
+                          ),
+
+                          const SizedBox(height: 12),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Builder(
+                                  builder: (context) {
+                                    // Attach a blur listener once
+                                    if (!quantityListenerAttached) {
+                                      quantityFocus.addListener(() {
+                                        if (!quantityFocus.hasFocus) {
+                                          if (_quantityValidator(quantity.text, unit) != null) setDialogState(() => touchedQuantity = true);
+                                        }
+                                      });
+                                      quantityListenerAttached = true;
+                                    }
+                                    return TextFormField(
+                                      controller: quantity,
+                                      focusNode: quantityFocus,
+                                      onChanged: (v) {
+                                        quantityChanged = true;
+                                        final err = _quantityValidator(v, unit);
+                                        setDialogState(() => touchedQuantity = err != null);
+                                      },
+                                      keyboardType: TextInputType.numberWithOptions(decimal: !_integerUnits.contains(unit)),
+                                      decoration: InputDecoration(
+                                        labelText: 'Quantity ($unit)',
+                                        errorMaxLines: 2,
+                                        errorText: (touchedQuantity && quantityChanged) ? _quantityValidator(quantity.text, unit) : null,
+                                      ),
+                                    );
+                                  },
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: DropdownButtonFormField<String>(
+                                  initialValue: unit,
+                                  decoration: const InputDecoration(labelText: 'Unit', errorMaxLines: 2),
+                                  items: _allUnits.map((u) => DropdownMenuItem(value: u, child: Text(u))).toList(),
+                                  onChanged: (value) => setDialogState(() => unit = value ?? unit),
+                                ),
+                              ),
+                            ],
+                          ),
+
+                          const SizedBox(height: 12),
+                          Builder(
+                            builder: (context) {
+                              if (!priceListenerAttached) {
+                                priceFocus.addListener(() {
+                                  if (!priceFocus.hasFocus) {
+                                    if (_priceValidator(askingPricePerKg.text) != null) setDialogState(() => touchedPrice = true);
+                                  }
+                                });
+                                priceListenerAttached = true;
+                              }
+                              return TextFormField(
+                                controller: askingPricePerKg,
+                                focusNode: priceFocus,
+                                onChanged: (v) {
+                                  priceChanged = true;
+                                  final err = _priceValidator(v);
+                                  setDialogState(() => touchedPrice = err != null);
+                                },
+                                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                decoration: InputDecoration(
+                                  labelText: type == 'supply' ? 'Selling price per kg (optional)' : 'Preferred buying price per kg (optional)',
+                                  errorMaxLines: 2,
+                                  errorText: (touchedPrice && priceChanged) ? _priceValidator(askingPricePerKg.text) : null,
+                                ),
+                              );
+                            },
+                          ),
+
+                          const SizedBox(height: 12),
+                          // Location: state dropdown + optional city
+                          DropdownButtonFormField<String>(
+                            initialValue: selectedState,
+                            decoration: const InputDecoration(labelText: 'State / Federal Territory *'),
+                            items: _malaysiaStates.map((s) => DropdownMenuItem(value: s, child: Text(s))).toList(),
+                            onChanged: (value) => setDialogState(() => selectedState = value ?? selectedState),
+                          ),
+                          const SizedBox(height: 8),
+                          Builder(
+                            builder: (context) {
+                              if (!cityListenerAttached) {
+                                cityFocus.addListener(() {
+                                  if (!cityFocus.hasFocus) {
+                                    if (_cityValidator(city.text) != null) setDialogState(() => touchedCity = true);
+                                  }
+                                });
+                                cityListenerAttached = true;
+                              }
+                              return TextFormField(
+                                controller: city,
+                                focusNode: cityFocus,
+                                onChanged: (v) {
+                                  cityChanged = true;
+                                  final err = _cityValidator(v);
+                                  setDialogState(() => touchedCity = err != null);
+                                },
+                                decoration: InputDecoration(
+                                  labelText: 'City / District (optional)',
+                                                                  errorMaxLines: 3,
+                                                                  helperMaxLines: 3,
+                                  errorText: (touchedCity && cityChanged) ? _cityValidator(city.text) : null,
+                                ),
+                              );
+                            },
+                          ),
+
+                          const SizedBox(height: 12),
+                          Builder(
+                            builder: (context) {
+                              if (!descriptionListenerAttached) {
+                                descriptionFocus.addListener(() {
+                                  if (!descriptionFocus.hasFocus) {
+                                    if (description.text.trim().length > 240) setDialogState(() => touchedDescription = true);
+                                  }
+                                });
+                                descriptionListenerAttached = true;
+                              }
+                              return TextFormField(
+                                controller: description,
+                                focusNode: descriptionFocus,
+                                onChanged: (v) {
+                                  descriptionChanged = true;
+                                  final err = v.trim().length > 240 ? 'Description cannot exceed 240 characters.' : null;
+                                  setDialogState(() => touchedDescription = err != null);
+                                },
+                                maxLines: 3,
+                                maxLength: 240,
+                                decoration: InputDecoration(
+                                  labelText: 'Description / condition & collection notes (optional)',
+                                  alignLabelWithHint: true,
+                                  helperText: 'Example: clean/dry condition, contamination, packaging or collection requirements.',
+                                                                  helperMaxLines: 3,
+                                                                  errorMaxLines: 3,
+                                  errorText: (touchedDescription && descriptionChanged && description.text.trim().length > 240) ? 'Description cannot exceed 240 characters.' : null,
+                                ),
+                              );
+                            },
+                          ),
+                        ],
                       ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  TextFormField(
-                    controller: askingPricePerKg,
-                    keyboardType: const TextInputType.numberWithOptions(
-                      decimal: true,
                     ),
-                    decoration: const InputDecoration(
-                      labelText: 'Asking price per kg (optional)',
-                    ),
-                    validator: _nonNegativePrice,
-                  ),
-                  const SizedBox(height: 12),
-                  TextFormField(
-                    controller: location,
-                    maxLength: 160,
-                    decoration: const InputDecoration(labelText: 'Location'),
-                    validator: (value) => validateRequiredText(
-                      value,
-                      label: 'a location',
-                      maxLength: 160,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  TextFormField(
-                    controller: description,
-                    maxLines: 3,
-                    maxLength: 240,
-                    decoration: const InputDecoration(
-                      labelText:
-                          'Material condition or collection notes (optional)',
-                      alignLabelWithHint: true,
-                    ),
-                  ),
-                ],
+                  ],
+                ),
               ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(dialogContext),
+                  child: const Text('Cancel'),
+                ),
+                FilledButton(
+                  onPressed: () {
+                    // Final validation across all required fields
+                    final materialText = material.text.trim();
+                    final qtyText = quantity.text.trim();
+                    setDialogState(() {
+                      touchedMaterial = true;
+                      touchedQuantity = true;
+                      touchedPrice = true;
+                      touchedCity = true;
+                      touchedDescription = true;
+                    });
+
+                    if (materialText.isEmpty || _materialValidator(materialText) != null || _quantityValidator(qtyText, unit) != null || _priceValidator(askingPricePerKg.text) != null) {
+                      // Focus first invalid field
+                      if (_materialValidator(materialText) != null) {
+                        materialFocus.requestFocus();
+                      } else if (_quantityValidator(qtyText, unit) != null) {
+                        quantityFocus.requestFocus();
+                      } else if (_priceValidator(askingPricePerKg.text) != null) {
+                        priceFocus.requestFocus();
+                      }
+                      return;
+                    }
+
+                    final qtyParsed = double.tryParse(qtyText) ?? 0.0;
+                    final finalQty = _integerUnits.contains(unit) ? qtyParsed.floorToDouble() : qtyParsed;
+                    final price = double.tryParse(askingPricePerKg.text.trim());
+                    final cityText = city.text.trim();
+                    final locationStr = cityText.isEmpty ? selectedState : '$cityText, $selectedState';
+
+                    Navigator.pop(
+                      dialogContext,
+                      _ListingDraft(
+                        type: type,
+                        material: materialText,
+                        quantity: finalQty,
+                        unit: unit,
+                        askingPricePerKg: price,
+                        location: locationStr,
+                        description: description.text.trim(),
+                      ),
+                    );
+                  },
+                  child: const Text('Publish listing'),
+                ),
+              ],
             ),
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () {
-                if (!(formKey.currentState?.validate() ?? false)) return;
-                Navigator.pop(
-                  dialogContext,
-                  _ListingDraft(
-                    type: type,
-                    material: material.text.trim(),
-                    quantity: double.parse(quantity.text.trim()),
-                    unit: unit,
-                    askingPricePerKg: double.tryParse(
-                      askingPricePerKg.text.trim(),
-                    ),
-                    location: location.text.trim(),
-                    description: description.text.trim(),
-                  ),
-                );
-              },
-              child: const Text('Publish listing'),
-            ),
-          ],
-        ),
-      ),
-    );
+        );
 
     // Let the modal route finish disposing before Riverpod rebuilds Profile.
     // Its TextFormFields still depend on these controllers during the close
@@ -530,11 +765,73 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     await Future<void>.delayed(const Duration(milliseconds: 300));
     material.dispose();
     quantity.dispose();
-    location.dispose();
+    // city controller replaced location for the new form
+    // (if city exists it will be disposed below in the edit path)
+    try {
+      city.dispose();
+    } catch (_) {}
     description.dispose();
     askingPricePerKg.dispose();
 
     if (draft == null || !mounted) return;
+
+    // Prevent duplicate material listings for the same user: ask to update existing or cancel
+    final stateNow = ref.read(appStateProvider);
+    final userId = stateNow.userId;
+    final normalized = draft.material.trim().toLowerCase();
+    final ownMatches = stateNow.listings.where((l) => l.ownerId == userId && l.material.trim().toLowerCase() == normalized).toList();
+
+    if (ownMatches.isNotEmpty) {
+      if (!context.mounted) return;
+      final updateAll = ownMatches.length > 1;
+      final choice = await showDialog<String>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Existing listing detected'),
+          content: Text(updateAll
+              ? 'You already have ${ownMatches.length} listings for "${draft.material}". Update all existing listing(s) with these details or cancel?'
+              : 'You already have a listing for "${draft.material}". Update the existing listing with these details or cancel?'),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, 'cancel'), child: const Text('Cancel')),
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx, updateAll ? 'update_all' : 'update'),
+              child: const Text('Update existing'),
+            ),
+          ],
+        ),
+      );
+
+      if (choice == null || choice == 'cancel') return;
+
+      try {
+        for (final existing in ownMatches) {
+          await ref.read(appStateProvider.notifier).updateListing(
+                id: existing.id,
+                type: draft.type,
+                material: draft.material,
+                quantity: draft.quantity,
+                unit: draft.unit,
+                location: draft.location,
+                description: draft.description,
+                askingPricePerKg: draft.askingPricePerKg,
+              );
+        }
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(updateAll ? 'Updated ${ownMatches.length} existing listings.' : 'Existing listing updated.')),
+        );
+      } catch (_) {
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Could not update existing listing(s). Please check your connection and try again.'),
+          ),
+        );
+      }
+
+      return;
+    }
+
     try {
       await ref
           .read(appStateProvider.notifier)
@@ -566,16 +863,52 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   Future<void> _showEditListing(Listing listing) async {
     final material = TextEditingController(text: listing.material);
     final quantity = TextEditingController(text: listing.quantity.toString());
-    final location = TextEditingController(text: listing.location);
+    final city = TextEditingController();
     final description = TextEditingController(text: listing.description);
     final askingPricePerKg = TextEditingController(
       text: listing.askingPricePerKg?.toString() ?? '',
     );
     final formKey = GlobalKey<FormState>();
     var type = listing.type == 'demand' ? 'demand' : 'supply';
-    var unit = ['kg', 'tonnes', 'pieces'].contains(listing.unit)
-        ? listing.unit
-        : 'kg';
+    var unit = _allUnits.contains(listing.unit) ? listing.unit : 'kg';
+
+    // Parse initial location into state and city if possible
+    String selectedState = _malaysiaStates.first;
+    if (listing.location.trim().isNotEmpty) {
+      final parts = listing.location.split(',');
+      if (parts.length >= 2) {
+        final left = parts.sublist(0, parts.length - 1).join(',').trim();
+        final right = parts.last.trim();
+        if (_malaysiaStates.contains(right)) {
+          selectedState = right;
+          city.text = left;
+        } else if (_malaysiaStates.contains(listing.location.trim())) {
+          selectedState = listing.location.trim();
+        }
+      } else {
+        if (_malaysiaStates.contains(listing.location.trim())) {
+          selectedState = listing.location.trim();
+        }
+      }
+    }
+
+    final materialFocusEdit = FocusNode();
+    final quantityFocusEdit = FocusNode();
+    final priceFocusEdit = FocusNode();
+    final cityFocusEdit = FocusNode();
+    final descriptionFocusEdit = FocusNode();
+
+    var touchedMaterialEdit = false;
+    var touchedQuantityEdit = false;
+    var touchedPriceEdit = false;
+    var touchedCityEdit = false;
+    var touchedDescriptionEdit = false;
+
+    var materialChangedEdit = false;
+    var quantityChangedEdit = false;
+
+    var materialListenerAttachedEdit = false;
+    var quantityListenerAttachedEdit = false;
 
     final draft = await showDialog<_ListingDraft>(
       context: context,
@@ -583,113 +916,166 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         builder: (context, setDialogState) => AlertDialog(
           title: const Text('Edit resource listing'),
           content: SingleChildScrollView(
-            child: Form(
-              key: formKey,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  DropdownButtonFormField<String>(
-                    initialValue: type,
-                    decoration: const InputDecoration(
-                      labelText: 'Listing type',
-                    ),
-                    items: const [
-                      DropdownMenuItem(
-                        value: 'supply',
-                        child: Text('I can supply'),
-                      ),
-                      DropdownMenuItem(
-                        value: 'demand',
-                        child: Text('I need to buy'),
-                      ),
-                    ],
-                    onChanged: (value) =>
-                        setDialogState(() => type = value ?? type),
-                  ),
-                  const SizedBox(height: 12),
-                  TextFormField(
-                    controller: material,
-                    maxLength: 120,
-                    decoration: const InputDecoration(
-                      labelText: 'Material or by-product',
-                    ),
-                    validator: (value) => validateRequiredText(
-                      value,
-                      label: 'a material or by-product',
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Row(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Form(
+                  key: formKey,
+                  autovalidateMode: AutovalidateMode.disabled,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      Expanded(
-                        child: TextFormField(
-                          controller: quantity,
-                          keyboardType: const TextInputType.numberWithOptions(
-                            decimal: true,
+                      DropdownButtonFormField<String>(
+                        initialValue: type,
+                        decoration: const InputDecoration(
+                          labelText: 'Listing type',
+                        ),
+                        items: const [
+                          DropdownMenuItem(
+                            value: 'supply',
+                            child: Text('I can supply'),
                           ),
-                          decoration: InputDecoration(
-                            labelText: 'Quantity ($unit)',
+                          DropdownMenuItem(
+                            value: 'demand',
+                            child: Text('I need to buy'),
                           ),
-                          validator: _positiveQuantity,
+                        ],
+                        onChanged: (value) => setDialogState(() => type = value ?? type),
+                      ),
+                      const SizedBox(height: 12),
+
+                      Autocomplete<String>(
+                        optionsBuilder: (TextEditingValue textEditingValue) {
+                          final input = textEditingValue.text.trim();
+                          if (input.isEmpty) return const Iterable<String>.empty();
+                          return _suggestedMaterials.where((s) => s.toLowerCase().contains(input.toLowerCase()));
+                        },
+                        fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
+                          if (controller.text != material.text) {
+                            controller.text = material.text;
+                            controller.selection = TextSelection.fromPosition(TextPosition(offset: controller.text.length));
+                          }
+                          controller.addListener(() {
+                           if (!materialChangedEdit && controller.text != (material.text)) materialChangedEdit = true;
+                           material.text = controller.text;
+                           if (materialChangedEdit && _materialValidator(controller.text) != null) setDialogState(() => touchedMaterialEdit = true);
+                          });
+                          if (!materialListenerAttachedEdit) {
+                           materialFocusEdit.addListener(() {
+                             if (!materialFocusEdit.hasFocus) {
+                               if (_materialValidator(material.text) != null) setDialogState(() => touchedMaterialEdit = true);
+                             }
+                           });
+                           materialListenerAttachedEdit = true;
+                          }
+                          return TextFormField(
+                           controller: controller,
+                           focusNode: materialFocusEdit,
+                           maxLength: 120,
+                           decoration: InputDecoration(
+                             labelText: 'Material or by-product',
+                             errorMaxLines: 2,
+                             errorText: (touchedMaterialEdit && materialChangedEdit) ? _materialValidator(material.text) : null,
+                           ),
+                          );
+                        },
+                        onSelected: (selection) => material.text = selection,
+                      ),
+
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Builder(
+                              builder: (context) {
+                                if (!quantityListenerAttachedEdit) {
+                                  quantityFocusEdit.addListener(() {
+                                    if (!quantityFocusEdit.hasFocus) {
+                                      if (_quantityValidator(quantity.text, unit) != null) setDialogState(() => touchedQuantityEdit = true);
+                                    }
+                                  });
+                                  quantityListenerAttachedEdit = true;
+                                }
+                                return TextFormField(
+                                  controller: quantity,
+                                  focusNode: quantityFocusEdit,
+                                  onChanged: (v) {
+                                    quantityChangedEdit = true;
+                                    final err = _quantityValidator(v, unit);
+                                    setDialogState(() => touchedQuantityEdit = err != null);
+                                  },
+                                  keyboardType: TextInputType.numberWithOptions(decimal: !_integerUnits.contains(unit)),
+                                  decoration: InputDecoration(
+                                    labelText: 'Quantity ($unit)',
+                                    errorText: (touchedQuantityEdit && quantityChangedEdit) ? _quantityValidator(quantity.text, unit) : null,
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: DropdownButtonFormField<String>(
+                              initialValue: unit,
+                              decoration: const InputDecoration(labelText: 'Unit'),
+                              items: _allUnits.map((u) => DropdownMenuItem(value: u, child: Text(u))).toList(),
+                              onChanged: (value) => setDialogState(() => unit = value ?? unit),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: askingPricePerKg,
+                        focusNode: priceFocusEdit,
+                        onChanged: (_) => setDialogState(() => touchedPriceEdit = true),
+                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                        decoration: InputDecoration(
+                          labelText: type == 'supply' ? 'Selling price per kg (optional)' : 'Preferred buying price per kg (optional)',
+                          errorText: touchedPriceEdit ? _priceValidator(askingPricePerKg.text) : null,
                         ),
                       ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: DropdownButtonFormField<String>(
-                          initialValue: unit,
-                          decoration: const InputDecoration(labelText: 'Unit'),
-                          items: const [
-                            DropdownMenuItem(value: 'kg', child: Text('kg')),
-                            DropdownMenuItem(
-                              value: 'tonnes',
-                              child: Text('tonnes'),
-                            ),
-                            DropdownMenuItem(
-                              value: 'pieces',
-                              child: Text('pieces'),
-                            ),
-                          ],
-                          onChanged: (value) =>
-                              setDialogState(() => unit = value ?? unit),
+
+                      const SizedBox(height: 12),
+                      DropdownButtonFormField<String>(
+                        initialValue: selectedState,
+                        decoration: const InputDecoration(labelText: 'State / Federal Territory *'),
+                        items: _malaysiaStates.map((s) => DropdownMenuItem(value: s, child: Text(s))).toList(),
+                        onChanged: (value) => setDialogState(() => selectedState = value ?? selectedState),
+                      ),
+                      const SizedBox(height: 8),
+                      TextFormField(
+                        controller: city,
+                        focusNode: cityFocusEdit,
+                        onChanged: (_) => setDialogState(() => touchedCityEdit = true),
+                        decoration: InputDecoration(
+                          labelText: 'City / District (optional)',
+                          errorMaxLines: 3,
+                          helperMaxLines: 3,
+                          errorText: touchedCityEdit ? _cityValidator(city.text) : null,
+                        ),
+                      ),
+
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: description,
+                        focusNode: descriptionFocusEdit,
+                        onChanged: (_) => setDialogState(() => touchedDescriptionEdit = true),
+                        maxLines: 3,
+                        maxLength: 240,
+                        decoration: InputDecoration(
+                          labelText: 'Description / condition & collection notes (optional)',
+                          alignLabelWithHint: true,
+                          helperText: 'Example: clean/dry condition, contamination, packaging or collection requirements.',
+                          helperMaxLines: 3,
+                          errorMaxLines: 3,
+                          errorText: (touchedDescriptionEdit && description.text.trim().length > 240) ? 'Description cannot exceed 240 characters.' : null,
                         ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 12),
-                  TextFormField(
-                    controller: askingPricePerKg,
-                    keyboardType: const TextInputType.numberWithOptions(
-                      decimal: true,
-                    ),
-                    decoration: const InputDecoration(
-                      labelText: 'Asking price per kg (optional)',
-                    ),
-                    validator: _nonNegativePrice,
-                  ),
-                  const SizedBox(height: 12),
-                  TextFormField(
-                    controller: location,
-                    maxLength: 160,
-                    decoration: const InputDecoration(labelText: 'Location'),
-                    validator: (value) => validateRequiredText(
-                      value,
-                      label: 'a location',
-                      maxLength: 160,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  TextFormField(
-                    controller: description,
-                    maxLines: 3,
-                    maxLength: 240,
-                    decoration: const InputDecoration(
-                      labelText:
-                          'Material condition or collection notes (optional)',
-                      alignLabelWithHint: true,
-                    ),
-                  ),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
           actions: [
@@ -699,18 +1085,44 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             ),
             FilledButton(
               onPressed: () {
-                if (!(formKey.currentState?.validate() ?? false)) return;
+                // final validation
+                setDialogState(() {
+                  touchedMaterialEdit = true;
+                  touchedQuantityEdit = true;
+                  touchedPriceEdit = true;
+                  touchedCityEdit = true;
+                  touchedDescriptionEdit = true;
+                });
+
+                final materialText = material.text.trim();
+                final qtyText = quantity.text.trim();
+
+                if (_materialValidator(materialText) != null || _quantityValidator(qtyText, unit) != null || _priceValidator(askingPricePerKg.text) != null) {
+                  if (_materialValidator(materialText) != null) {
+                    materialFocusEdit.requestFocus();
+                  } else if (_quantityValidator(qtyText, unit) != null) {
+                    quantityFocusEdit.requestFocus();
+                  } else if (_priceValidator(askingPricePerKg.text) != null) {
+                    priceFocusEdit.requestFocus();
+                  }
+                  return;
+                }
+
+                final qtyParsed = double.tryParse(qtyText) ?? 0.0;
+                final finalQty = _integerUnits.contains(unit) ? qtyParsed.floorToDouble() : qtyParsed;
+                final price = double.tryParse(askingPricePerKg.text.trim());
+                final cityText = city.text.trim();
+                final locationStr = cityText.isEmpty ? selectedState : '$cityText, $selectedState';
+
                 Navigator.pop(
                   dialogContext,
                   _ListingDraft(
                     type: type,
-                    material: material.text.trim(),
-                    quantity: double.parse(quantity.text.trim()),
+                    material: materialText,
+                    quantity: finalQty,
                     unit: unit,
-                    askingPricePerKg: double.tryParse(
-                      askingPricePerKg.text.trim(),
-                    ),
-                    location: location.text.trim(),
+                    askingPricePerKg: price,
+                    location: locationStr,
                     description: description.text.trim(),
                   ),
                 );
@@ -725,7 +1137,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     await Future<void>.delayed(const Duration(milliseconds: 300));
     material.dispose();
     quantity.dispose();
-    location.dispose();
+    city.dispose();
     description.dispose();
     askingPricePerKg.dispose();
 
@@ -803,11 +1215,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     }
   }
 
-  String? _positiveQuantity(String? value) =>
-      validatePositiveNumber(value, label: 'quantity');
-
-  String? _nonNegativePrice(String? value) =>
-      validateNonNegativeNumber(value, label: 'price');
 }
 
 class _ListingDraft {

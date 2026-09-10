@@ -7,6 +7,7 @@ import '../features/home/presentation/home_screen.dart';
 import '../features/resource_marketplace/presentation/marketplace_screen.dart';
 import '../features/resource_profiles/presentation/profile_screen.dart';
 import '../features/skill_match/presentation/skill_match_screen.dart';
+import '../features/user_profile_screen.dart';
 
 final appRouter = GoRouter(
   initialLocation: '/splash',
@@ -33,6 +34,7 @@ final appRouter = GoRouter(
     GoRoute(path: '/skill-match', name: 'skillMatch', builder: (context, state) => const SkillMatchScreen()),
     GoRoute(path: '/fair-price', name: 'fairPrice', builder: (context, state) => const FairPriceScreen()),
     GoRoute(path: '/resource-profile', name: 'resourceProfile', builder: (context, state) => const ProfileScreen()),
+    GoRoute(path: '/user-profile', name: 'userProfile', builder: (context, state) => const UserProfileScreen()),
     GoRoute(path: '/marketplace', name: 'marketplace', builder: (context, state) => const MarketplaceScreen()),
   ],
   errorBuilder: (context, state) => Scaffold(
