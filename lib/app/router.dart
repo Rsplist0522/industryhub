@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../features/auth/presentation/auth_screens.dart';
+import '../features/fair_price/data/fair_price_recommendation_repository.dart';
 import '../features/fair_price/presentation/fair_price_screen.dart';
+import '../features/fair_price/presentation/saved_recommendations_screen.dart';
 import '../features/home/presentation/home_screen.dart';
 import '../features/resource_marketplace/presentation/marketplace_screen.dart';
 import '../features/resource_profiles/presentation/profile_screen.dart';
@@ -31,7 +33,20 @@ final appRouter = GoRouter(
     GoRoute(path: '/role-select', name: 'roleSelect', builder: (context, state) => const RoleSelectScreen()),
     GoRoute(path: '/home', name: 'home', builder: (context, state) => const HomeScreen()),
     GoRoute(path: '/skill-match', name: 'skillMatch', builder: (context, state) => const SkillMatchScreen()),
-    GoRoute(path: '/fair-price', name: 'fairPrice', builder: (context, state) => const FairPriceScreen()),
+    GoRoute(
+      path: '/fair-price',
+      name: 'fairPrice',
+      builder: (context, state) => FairPriceScreen(
+        initialRecommendation: state.extra is SavedFairPriceRecommendation
+            ? state.extra as SavedFairPriceRecommendation
+            : null,
+      ),
+    ),
+    GoRoute(
+      path: '/fair-price/recommendations',
+      name: 'fairPriceRecommendations',
+      builder: (context, state) => const SavedRecommendationsScreen(),
+    ),
     GoRoute(path: '/resource-profile', name: 'resourceProfile', builder: (context, state) => const ProfileScreen()),
     GoRoute(path: '/marketplace', name: 'marketplace', builder: (context, state) => const MarketplaceScreen()),
   ],

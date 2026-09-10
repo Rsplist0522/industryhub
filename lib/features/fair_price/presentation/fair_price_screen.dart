@@ -4,6 +4,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../app/theme.dart';
@@ -11,6 +12,7 @@ import '../../../core/app_state.dart';
 import '../../../core/services.dart';
 import '../../../core/widgets.dart';
 import '../../../core/validators.dart';
+import '../data/fair_price_recommendation_repository.dart';
 import '../data/market_price_repository.dart';
 
 class _Benchmark {
@@ -82,7 +84,9 @@ class _AiNegotiationAdvice {
 }
 
 class FairPriceScreen extends ConsumerStatefulWidget {
-  const FairPriceScreen({super.key});
+  const FairPriceScreen({super.key, this.initialRecommendation});
+
+  final SavedFairPriceRecommendation? initialRecommendation;
 
   @override
   ConsumerState<FairPriceScreen> createState() => _FairPriceScreenState();
@@ -107,8 +111,10 @@ class _FairPriceScreenState extends ConsumerState<FairPriceScreen> {
   String _collection = 'Buyer collects';
   _NegotiationResult? _result;
   final _marketPriceRepository = MarketPriceRepository();
+  final _recommendationRepository = FairPriceRecommendationRepository();
   final _aiService = const AiService();
   _AiNegotiationAdvice? _aiAdvice;
+  String? _editingRecommendationId;
   CommodityPriceObservation? _commoditySignal;
   PriceIndexObservation? _materialIndexSignal;
   PriceIndexObservation? _ppiSignal;
@@ -150,6 +156,18 @@ class _FairPriceScreenState extends ConsumerState<FairPriceScreen> {
   @override
   void initState() {
     super.initState();
+    if (widget.initialRecommendation != null) {
+      final recommendation = widget.initialRecommendation!;
+      _editingRecommendationId = recommendation.id;
+      _selectedMaterial = recommendation.materialCategory.isNotEmpty
+          ? recommendation.materialCategory
+          : 'Other material';
+      _product.text = recommendation.product;
+      _quantity.text = recommendation.quantity.toString();
+      _price.text = recommendation.proposedPricePerKg.toString();
+      _condition = recommendation.materialCondition;
+      _collection = recommendation.collectionTerms;
+    }
     Future<void>.microtask(() => _loadMarketSignals(_product.text.trim()));
   }
 
@@ -507,37 +525,68 @@ Evidence library:
 
   Future<void> _saveRecommendation() async {
     final result = _result;
-    if (result == null || _isSaved || _isSavingRecommendation) return;
+    if (result == null || _isSavingRecommendation) return;
+
+    final isUpdating = _editingRecommendationId != null;
 
     setState(() => _isSavingRecommendation = true);
     try {
-      await ref
-          .read(appStateProvider.notifier)
-          .saveNegotiation(
-            product: result.product,
-            quantity: result.quantity,
-            proposedPrice: result.proposedPrice,
-            floorPrice: result.floor,
-            targetPrice: result.target,
-            ceilingPrice: result.ceiling,
-            condition: _condition,
-            collectionTerms: _collection,
-            strategy: result.strategy,
-            hasLiveEvidence: result.benchmark.isLiveEvidence,
-          );
+      final recommendation = isUpdating
+          ? await _recommendationRepository.updateRecommendation(
+              id: _editingRecommendationId!,
+              materialCategory: _selectedMaterial,
+              product: result.product,
+              quantity: result.quantity,
+              proposedPricePerKg: result.proposedPrice,
+              materialCondition: _condition,
+              collectionTerms: _collection,
+              recommendedLow: result.floor,
+              recommendedHigh: result.ceiling,
+              suggestedTarget: result.target,
+              strategy: result.strategy,
+              confidence: null,
+              peerObservationCount: _localListingPrices.length,
+              notes: result.strategy,
+              hasLiveEvidence: result.benchmark.isLiveEvidence,
+            )
+          : await _recommendationRepository.createRecommendation(
+              materialCategory: _selectedMaterial,
+              product: result.product,
+              quantity: result.quantity,
+              proposedPricePerKg: result.proposedPrice,
+              materialCondition: _condition,
+              collectionTerms: _collection,
+              recommendedLow: result.floor,
+              recommendedHigh: result.ceiling,
+              suggestedTarget: result.target,
+              strategy: result.strategy,
+              confidence: null,
+              peerObservationCount: _localListingPrices.length,
+              notes: result.strategy,
+              hasLiveEvidence: result.benchmark.isLiveEvidence,
+            );
       if (!mounted) return;
-      setState(() => _isSaved = true);
+      setState(() {
+        _isSaved = true;
+        _editingRecommendationId = recommendation.id;
+      });
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Price recommendation saved to your profile.'),
+        SnackBar(
+          content: Text(
+            isUpdating
+                ? 'Recommendation updated successfully.'
+                : 'Recommendation saved successfully.',
+          ),
         ),
       );
-    } catch (_) {
+    } catch (error, stackTrace) {
+      debugPrint('FairPrice recommendation save failed: $error');
+      debugPrintStack(stackTrace: stackTrace);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
-            'Price recommendation could not be saved. Please check your connection and try again.',
+            'Recommendation could not be saved. Please check your connection and try again.',
           ),
         ),
       );
@@ -557,6 +606,7 @@ Evidence library:
       _collection = 'Buyer collects';
       _round = 0;
       _isSaved = false;
+      _editingRecommendationId = null;
       _result = null;
       _aiAdvice = null;
       _chatMessages.clear();
@@ -591,6 +641,11 @@ Evidence library:
       title: 'FairPrice Advisor',
       showBack: true,
       actions: [
+        IconButton(
+          icon: const Icon(Icons.bookmark_border),
+          tooltip: 'Saved recommendations',
+          onPressed: () => context.push('/fair-price/recommendations'),
+        ),
         IconButton(
           icon: const Icon(Icons.restart_alt),
           tooltip: 'Reset scenario',
@@ -797,6 +852,7 @@ Evidence library:
               result: _result!,
               advice: _aiAdvice,
               isSaved: _isSaved,
+              isEditing: _editingRecommendationId != null,
               isSaving: _isSavingRecommendation,
               onSave: _saveRecommendation,
             ),
@@ -1141,6 +1197,7 @@ class _PriceResult extends StatelessWidget {
     required this.result,
     required this.advice,
     required this.isSaved,
+    required this.isEditing,
     required this.isSaving,
     required this.onSave,
   });
@@ -1148,6 +1205,7 @@ class _PriceResult extends StatelessWidget {
   final _NegotiationResult result;
   final _AiNegotiationAdvice? advice;
   final bool isSaved;
+  final bool isEditing;
   final bool isSaving;
   final Future<void> Function() onSave;
 
@@ -1326,7 +1384,13 @@ class _PriceResult extends StatelessWidget {
                       side: const BorderSide(color: AppColors.white),
                     ),
                     icon: const Icon(Icons.bookmark_add_outlined, size: 18),
-                    label: Text(isSaving ? 'Saving…' : 'Save recommendation'),
+                    label: Text(
+                      isSaving
+                          ? 'Saving…'
+                          : (isEditing
+                              ? 'Update saved recommendation'
+                              : 'Save recommendation'),
+                    ),
                   ),
           ],
         ),
