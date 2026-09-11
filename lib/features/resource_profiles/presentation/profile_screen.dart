@@ -101,6 +101,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   final _aiService = const AiService();
   List<IndustrySector> _industrySectors = const [];
   bool _isLoadingIndustrySectors = true;
+  bool _isRefreshing = false;
   bool _isProfileAiThinking = false;
   String? _profileAiAnswer;
 
@@ -125,6 +126,20 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       if (!mounted) return;
       setState(() => _isLoadingIndustrySectors = false);
       debugPrint('MSIC sector catalogue could not be loaded: $error');
+    }
+  }
+
+  Future<void> _refreshProfile() async {
+    if (_isRefreshing) return;
+
+    setState(() => _isRefreshing = true);
+    try {
+      await Future.wait<void>([
+        ref.read(appStateProvider.notifier).refreshSupabaseData(),
+        _loadIndustrySectors(),
+      ]);
+    } finally {
+      if (mounted) setState(() => _isRefreshing = false);
     }
   }
 
@@ -158,6 +173,22 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     return AppShell(
       title: 'My Profile',
       showBack: true,
+      actions: [
+        _isRefreshing
+            ? const Padding(
+                padding: EdgeInsets.all(16),
+                child: SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              )
+            : IconButton(
+                tooltip: 'Refresh profile',
+                onPressed: _refreshProfile,
+                icon: const Icon(Icons.refresh_outlined),
+              ),
+      ],
       bottomNavigationBar: const AppBottomNav(currentIndex: 2),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(20, 20, 20, 30),
@@ -491,6 +522,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         var priceListenerAttached = false;
         var cityListenerAttached = false;
         var descriptionListenerAttached = false;
+        var materialListenerAttached = false;
 
         final draft = await showDialog<_ListingDraft>(
           context: context,
@@ -547,23 +579,22 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                                 controller.text = material.text;
                                 controller.selection = TextSelection.fromPosition(TextPosition(offset: controller.text.length));
                               }
-                              controller.addListener(() {
+                              if (!materialListenerAttached) {
+                                controller.addListener(() {
+                                  if (!materialChanged && controller.text != material.text) {
+                                    materialChanged = true;
+                                  }
+                                  material.text = controller.text;
+                                });
 
-                                if (!materialChanged && controller.text != (material.text)) {
-                                  materialChanged = true;
-                                }
-                                material.text = controller.text;
-
-                                if (materialChanged && _materialValidator(controller.text) != null) {
-                                  setDialogState(() => touchedMaterial = true);
-                                }
-                              });
-
-                              materialFocus.addListener(() {
-                                if (!materialFocus.hasFocus) {
-                                  if (_materialValidator(material.text) != null) setDialogState(() => touchedMaterial = true);
-                                }
-                              });
+                                materialFocus.addListener(() {
+                                  if (!materialFocus.hasFocus &&
+                                      _materialValidator(material.text) != null) {
+                                    setDialogState(() => touchedMaterial = true);
+                                  }
+                                });
+                                materialListenerAttached = true;
+                              }
                               return TextFormField(
                                 controller: controller,
                                 focusNode: materialFocus,
@@ -1386,7 +1417,10 @@ class _ProfileEditor extends StatelessWidget {
                   ? sector.text
                   : null,
               isExpanded: true,
-              menuMaxHeight: 280,
+              itemHeight: null,
+              menuMaxHeight: (MediaQuery.sizeOf(context).height * 0.6)
+                  .clamp(280.0, 520.0)
+                  .toDouble(),
               decoration: InputDecoration(
                 labelText: 'Industry sector',
                 helperText: 'Official DOSM MSIC sector catalogue',
@@ -1396,19 +1430,37 @@ class _ProfileEditor extends StatelessWidget {
                   icon: const Icon(Icons.refresh_outlined),
                 ),
               ),
+              selectedItemBuilder: (context) => sectors
+                  .map(
+                    (item) => Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        item.name,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  )
+                  .toList(),
               items: sectors
                   .map(
                     (item) => DropdownMenuItem(
                       value: item.name,
-                      child: Text(item.name, overflow: TextOverflow.ellipsis),
+                      child: Text(
+                        item.name,
+                        maxLines: 3,
+                        softWrap: true,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
                   )
                   .toList(),
               onChanged: (value) {
                 if (value != null) sector.text = value;
               },
-              validator: (value) =>
-                  validateRequiredText(value, label: 'an industry sector'),
+              validator: (value) => value == null || value.trim().isEmpty
+                  ? 'Select an industry sector.'
+                  : null,
             )
           else
             TextFormField(
