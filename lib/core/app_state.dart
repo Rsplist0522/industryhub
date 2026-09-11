@@ -1,7 +1,3 @@
-// Supabase-backed application state for IndustryHub.
-// Profile and marketplace records are scoped to the signed-in workspace while
-// the UI continues to expose simple immutable models.
-
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
@@ -44,7 +40,12 @@ class Listing {
     return text.replaceFirst(RegExp(r'\.?0+$'), '');
   }
 
-  Listing copyWith({String? owner, double? askingPricePerKg, String? status}) =>
+  Listing copyWith({
+    String? owner,
+    bool? verified,
+    double? askingPricePerKg,
+    String? status,
+  }) =>
       Listing(
         id: id,
         type: type,
@@ -55,27 +56,36 @@ class Listing {
         description: description,
         owner: owner ?? this.owner,
         ownerId: ownerId,
-        verified: verified,
-        askingPricePerKg: askingPricePerKg ?? this.askingPricePerKg,
+        verified: verified ?? this.verified,
+        askingPricePerKg:
+            askingPricePerKg ?? this.askingPricePerKg,
         status: status ?? this.status,
       );
 
-  factory Listing.fromSupabase(Map<String, dynamic> data) {
+  factory Listing.fromSupabase(
+    Map<String, dynamic> data,
+  ) {
     final rawQuantity = data['quantity'];
+
     return Listing(
       id: data['id'] as String? ?? '',
       type: data['type'] as String? ?? 'supply',
-      material: data['material'] as String? ?? 'Unnamed material',
+      material:
+          data['material'] as String? ?? 'Unnamed material',
       quantity: rawQuantity is num
           ? rawQuantity.toDouble()
           : double.tryParse('$rawQuantity') ?? 0,
       unit: data['unit'] as String? ?? 'kg',
-      location: data['location'] as String? ?? 'Location not specified',
+      location: data['location'] as String? ??
+          'Location not specified',
       description: data['description'] as String? ?? '',
-      owner: data['owner'] as String? ?? 'Unspecified business',
+      owner: data['owner'] as String? ??
+          'Unspecified business',
       ownerId: data['owner_id'] as String? ?? '',
       verified: data['verified'] as bool? ?? false,
-      askingPricePerKg: (data['asking_price_per_kg'] as num?)?.toDouble(),
+      askingPricePerKg:
+          (data['asking_price_per_kg'] as num?)
+              ?.toDouble(),
       status: data['status'] as String? ?? 'ACTIVE',
     );
   }
@@ -89,42 +99,53 @@ class CompanyProfile {
     this.verified = false,
     this.msicCode,
     this.msicDescription,
-    this.avatarUrl,
     this.contactName,
-    this.contactEmail,
     this.contactPhone,
+    this.profileImagePath,
   });
 
   final String businessName;
   final String sector;
   final String role;
   final bool verified;
+
   final String? msicCode;
   final String? msicDescription;
 
-  // Optional additional profile fields used for the separate "User Profile"
-  // view. These are read from the Supabase profile row when present but are
-  // optional so they won't break existing migrations.
-  final String? avatarUrl;
   final String? contactName;
-  final String? contactEmail;
   final String? contactPhone;
 
-  bool get hasRequiredProfileIdentity =>
-      businessName.trim().isNotEmpty && sector.trim().isNotEmpty;
+  final String? profileImagePath;
 
-  factory CompanyProfile.fromSupabase(Map<String, dynamic> data) =>
+  bool get hasRequiredProfileIdentity =>
+      businessName.trim().isNotEmpty &&
+      sector.trim().isNotEmpty;
+
+  bool get isProfileComplete =>
+    businessName.trim().isNotEmpty &&
+    (contactName ?? '').trim().isNotEmpty &&
+    (contactPhone ?? '').trim().isNotEmpty &&
+    sector.trim().isNotEmpty &&
+    role.trim().isNotEmpty &&
+    (msicCode ?? '').trim().isNotEmpty;
+
+  factory CompanyProfile.fromSupabase(
+    Map<String, dynamic> data,
+  ) =>
       CompanyProfile(
-        businessName: data['business_name'] as String? ?? '',
+        businessName:
+            data['business_name'] as String? ?? '',
         sector: data['sector'] as String? ?? '',
         role: data['role'] as String? ?? '',
         verified: data['verified'] as bool? ?? false,
         msicCode: data['msic_code'] as String?,
-        msicDescription: data['msic_description'] as String?,
-        avatarUrl: data['avatar_url'] as String?,
+        msicDescription:
+            data['msic_description'] as String?,
         contactName: data['contact_name'] as String?,
-        contactEmail: data['contact_email'] as String?,
-        contactPhone: data['contact_phone'] as String?,
+        contactPhone:
+            data['contact_phone'] as String?,
+        profileImagePath:
+            data['profile_image_url'] as String?,
       );
 
   CompanyProfile copyWith({
@@ -134,22 +155,29 @@ class CompanyProfile {
     bool? verified,
     String? msicCode,
     String? msicDescription,
-    String? avatarUrl,
     String? contactName,
-    String? contactEmail,
     String? contactPhone,
-  }) => CompanyProfile(
-    businessName: businessName ?? this.businessName,
-    sector: sector ?? this.sector,
-    role: role ?? this.role,
-    verified: verified ?? this.verified,
-    msicCode: msicCode ?? this.msicCode,
-    msicDescription: msicDescription ?? this.msicDescription,
-    avatarUrl: avatarUrl ?? this.avatarUrl,
-    contactName: contactName ?? this.contactName,
-    contactEmail: contactEmail ?? this.contactEmail,
-    contactPhone: contactPhone ?? this.contactPhone,
-  );
+    String? profileImagePath,
+    bool clearProfileImage = false,
+  }) =>
+      CompanyProfile(
+        businessName:
+            businessName ?? this.businessName,
+        sector: sector ?? this.sector,
+        role: role ?? this.role,
+        verified: verified ?? this.verified,
+        msicCode: msicCode ?? this.msicCode,
+        msicDescription:
+            msicDescription ?? this.msicDescription,
+        contactName:
+            contactName ?? this.contactName,
+        contactPhone:
+            contactPhone ?? this.contactPhone,
+        profileImagePath: clearProfileImage
+            ? null
+            : profileImagePath ??
+                this.profileImagePath,
+      );
 }
 
 class IndustryHubState {
@@ -170,7 +198,11 @@ class IndustryHubState {
   final String userId;
 
   int get activeListings => listings
-      .where((item) => item.ownerId == userId && item.status == 'ACTIVE')
+      .where(
+        (item) =>
+            item.ownerId == userId &&
+            item.status == 'ACTIVE',
+      )
       .length;
 
   IndustryHubState copyWith({
@@ -180,54 +212,79 @@ class IndustryHubState {
     int? negotiations,
     bool? isLoading,
     String? userId,
-  }) => IndustryHubState(
-    profile: profile ?? this.profile,
-    listings: listings ?? this.listings,
-    savedMatches: savedMatches ?? this.savedMatches,
-    negotiations: negotiations ?? this.negotiations,
-    isLoading: isLoading ?? this.isLoading,
-    userId: userId ?? this.userId,
-  );
+  }) =>
+      IndustryHubState(
+        profile: profile ?? this.profile,
+        listings: listings ?? this.listings,
+        savedMatches:
+            savedMatches ?? this.savedMatches,
+        negotiations:
+            negotiations ?? this.negotiations,
+        isLoading: isLoading ?? this.isLoading,
+        userId: userId ?? this.userId,
+      );
 }
 
-class IndustryHubNotifier extends Notifier<IndustryHubState> {
+class IndustryHubNotifier
+    extends Notifier<IndustryHubState> {
   late final SupabaseClient _supabase;
   StreamSubscription<AuthState>? _authSubscription;
+
   var _disposed = false;
 
   @override
   IndustryHubState build() {
     _supabase = Supabase.instance.client;
-    _authSubscription = _supabase.auth.onAuthStateChange.listen((authState) {
-      switch (authState.event) {
-        case AuthChangeEvent.initialSession:
-        case AuthChangeEvent.signedIn:
-        case AuthChangeEvent.signedOut:
-        case AuthChangeEvent.userUpdated:
-          _loadProfileAndListings();
-        default:
-          break;
-      }
-    });
+
+    _authSubscription =
+        _supabase.auth.onAuthStateChange.listen(
+      (authState) {
+        switch (authState.event) {
+          case AuthChangeEvent.initialSession:
+          case AuthChangeEvent.signedIn:
+          case AuthChangeEvent.signedOut:
+          case AuthChangeEvent.userUpdated:
+            _loadProfileAndListings();
+          default:
+            break;
+        }
+      },
+    );
+
     ref.onDispose(() {
       _disposed = true;
       _authSubscription?.cancel();
     });
-    Future<void>.microtask(_loadProfileAndListings);
+
+    Future<void>.microtask(
+      _loadProfileAndListings,
+    );
+
     return const IndustryHubState();
   }
 
   Future<User?> _ensureSignedInUser() async {
-    if (!hasVerifiedSupabaseSession(_supabase)) return null;
+    if (!hasVerifiedSupabaseSession(_supabase)) {
+      return null;
+    }
+
     return _supabase.auth.currentUser;
   }
 
   Future<void> _loadProfileAndListings() async {
-    if (!_disposed) state = state.copyWith(isLoading: true);
+    if (!_disposed) {
+      state = state.copyWith(isLoading: true);
+    }
+
     try {
       final user = await _ensureSignedInUser();
+
       if (user == null) {
-        if (!_disposed) state = const IndustryHubState(isLoading: false);
+        if (!_disposed) {
+          state = const IndustryHubState(
+            isLoading: false,
+          );
+        }
         return;
       }
 
@@ -236,14 +293,18 @@ class IndustryHubNotifier extends Notifier<IndustryHubState> {
           .select()
           .eq('user_id', user.id)
           .maybeSingle();
+
       final profile = profileRow == null
           ? const CompanyProfile()
-          : CompanyProfile.fromSupabase(profileRow);
+          : CompanyProfile.fromSupabase(
+              profileRow,
+            );
 
       if (profileRow == null) {
         await _supabase.from('profiles').insert({
           'user_id': user.id,
-          'business_name': profile.businessName,
+          'business_name':
+              profile.businessName,
           'sector': profile.sector,
           'role': profile.role,
         });
@@ -253,21 +314,38 @@ class IndustryHubNotifier extends Notifier<IndustryHubState> {
           .from('listings')
           .select()
           .eq('status', 'ACTIVE')
-          .order('created_at', ascending: false);
+          .order(
+            'created_at',
+            ascending: false,
+          );
+
       final listings = (listingRows as List)
           .map(
-            (row) =>
-                Listing.fromSupabase(Map<String, dynamic>.from(row as Map)),
+            (row) => Listing.fromSupabase(
+              Map<String, dynamic>.from(
+                row as Map,
+              ),
+            ),
           )
           .toList();
-      final savedMatches = await _countOwnRows('saved_matches', user.id);
-      final negotiations = await _countOwnRows('fair_price_sessions', user.id);
+
+      final savedMatches = await _countOwnRows(
+        'saved_matches',
+        user.id,
+      );
+
+      final negotiations = await _countOwnRows(
+        'fair_price_sessions',
+        user.id,
+      );
 
       if (_disposed ||
           !hasVerifiedSupabaseSession(_supabase) ||
-          _supabase.auth.currentUser?.id != user.id) {
+          _supabase.auth.currentUser?.id !=
+              user.id) {
         return;
       }
+
       state = state.copyWith(
         profile: profile,
         listings: listings,
@@ -277,22 +355,37 @@ class IndustryHubNotifier extends Notifier<IndustryHubState> {
         userId: user.id,
       );
     } catch (error) {
-      debugPrint('IndustryHub Supabase load failed: $error');
-      if (!_disposed) state = state.copyWith(isLoading: false);
+      debugPrint(
+        'IndustryHub Supabase load failed: $error',
+      );
+
+      if (!_disposed) {
+        state = state.copyWith(
+          isLoading: false,
+        );
+      }
     }
   }
 
-  Future<void> refreshSupabaseData() => _loadProfileAndListings();
+  Future<void> refreshSupabaseData() =>
+      _loadProfileAndListings();
 
-  Future<int> _countOwnRows(String table, String userId) async {
+  Future<int> _countOwnRows(
+    String table,
+    String userId,
+  ) async {
     try {
       final rows = await _supabase
           .from(table)
           .select('id')
           .eq('user_id', userId);
+
       return (rows as List).length;
     } catch (error) {
-      debugPrint('IndustryHub $table count could not be loaded: $error');
+      debugPrint(
+        'IndustryHub $table count could not be loaded: $error',
+      );
+
       return 0;
     }
   }
@@ -305,82 +398,126 @@ class IndustryHubNotifier extends Notifier<IndustryHubState> {
     String? msicDescription,
     bool clearMsic = false,
     String? contactName,
-    String? contactEmail,
     String? contactPhone,
-    String? avatarUrl,
+    String? profileImagePath,
+    bool clearProfileImage = false,
   }) async {
     final user = await _ensureSignedInUser();
-    if (user == null) throw StateError('Sign in before updating your profile.');
+
+    if (user == null) {
+      throw StateError(
+        'Sign in before updating your profile.',
+      );
+    }
 
     final updatedProfile = CompanyProfile(
-      businessName: businessName?.trim().isNotEmpty == true
-          ? businessName!.trim()
-          : state.profile.businessName,
-      sector: sector?.trim().isNotEmpty == true
-          ? sector!.trim()
-          : state.profile.sector,
-      role: role?.trim().isNotEmpty == true ? role!.trim() : state.profile.role,
+      businessName:
+          businessName?.trim().isNotEmpty == true
+              ? businessName!.trim()
+              : state.profile.businessName,
+      sector:
+          sector?.trim().isNotEmpty == true
+              ? sector!.trim()
+              : state.profile.sector,
+      role:
+          role?.trim().isNotEmpty == true
+              ? role!.trim()
+              : state.profile.role,
       verified: state.profile.verified,
       msicCode: clearMsic
           ? null
-          : (msicCode?.trim().isNotEmpty == true
-                ? msicCode!.trim()
-                : state.profile.msicCode),
+          : (
+              msicCode?.trim().isNotEmpty ==
+                      true
+                  ? msicCode!.trim()
+                  : state.profile.msicCode
+            ),
       msicDescription: clearMsic
           ? null
-          : (msicDescription?.trim().isNotEmpty == true
-                ? msicDescription!.trim()
-                : state.profile.msicDescription),
-      avatarUrl: avatarUrl ?? state.profile.avatarUrl,
-      contactName: contactName ?? state.profile.contactName,
-      contactEmail: contactEmail ?? state.profile.contactEmail,
-      contactPhone: contactPhone ?? state.profile.contactPhone,
+          : (
+              msicDescription
+                          ?.trim()
+                          .isNotEmpty ==
+                      true
+                  ? msicDescription!.trim()
+                  : state
+                      .profile
+                      .msicDescription
+            ),
+      contactName:
+          contactName ?? state.profile.contactName,
+      contactPhone:
+          contactPhone ??
+          state.profile.contactPhone,
+      profileImagePath: clearProfileImage
+          ? null
+          : profileImagePath ??
+              state.profile.profileImagePath,
     );
 
     try {
       final updateMap = {
-        'business_name': updatedProfile.businessName,
+        'business_name':
+            updatedProfile.businessName,
         'sector': updatedProfile.sector,
         'role': updatedProfile.role,
-        'msic_code': updatedProfile.msicCode,
-        'msic_description': updatedProfile.msicDescription,
-        'avatar_url': updatedProfile.avatarUrl,
-        'contact_name': updatedProfile.contactName,
-        'contact_email': updatedProfile.contactEmail,
-        'contact_phone': updatedProfile.contactPhone,
+        'msic_code':
+            updatedProfile.msicCode,
+        'msic_description':
+            updatedProfile.msicDescription,
+        'contact_name':
+            updatedProfile.contactName,
+        'contact_phone':
+            updatedProfile.contactPhone,
+        'profile_image_url':
+            updatedProfile.profileImagePath,
       };
 
-      await _supabase
+      final updatedRow = await _supabase
           .from('profiles')
           .update(updateMap)
-          .eq('user_id', user.id);
+          .eq('user_id', user.id)
+          .select()
+          .single();
 
-      var updatedListings = state.listings;
-      if (updatedProfile.businessName != state.profile.businessName) {
-        updatedListings = state.listings
-            .map(
-              (listing) => listing.ownerId == user.id
-                  ? listing.copyWith(owner: updatedProfile.businessName)
-                  : listing,
-            )
-            .toList();
-      }
+      final savedProfile = CompanyProfile.fromSupabase(
+        Map<String, dynamic>.from(updatedRow),
+      );
+
+      final updatedListings = state.listings
+          .map(
+            (listing) => listing.ownerId == user.id
+                ? listing.copyWith(
+                    owner: savedProfile.businessName,
+                    verified: savedProfile.verified,
+                  )
+                : listing,
+          )
+          .toList();
 
       if (_disposed) return;
+
       state = state.copyWith(
-        profile: updatedProfile,
+        profile: savedProfile,
         listings: updatedListings,
       );
     } catch (error) {
-      debugPrint('IndustryHub Supabase profile update failed: $error');
+      debugPrint(
+        'IndustryHub Supabase profile update failed: $error',
+      );
+
       rethrow;
     }
   }
 
-  Future<int> createPresentationListings() async {
+  Future<int> createPresentationListings()
+      async {
     final user = await _ensureSignedInUser();
+
     if (user == null) {
-      throw StateError('Sign in before loading presentation listings.');
+      throw StateError(
+        'Sign in before loading presentation listings.',
+      );
     }
 
     final existingRows = await _supabase
@@ -388,19 +525,32 @@ class IndustryHubNotifier extends Notifier<IndustryHubState> {
         .select('id')
         .eq('owner_id', user.id)
         .eq('status', 'ACTIVE')
-        .ilike('description', '[PRESENTATION SAMPLE]%');
-    if ((existingRows as List).isNotEmpty) return 0;
+        .ilike(
+          'description',
+          '[PRESENTATION SAMPLE]%',
+        );
 
-    if (!state.profile.hasRequiredProfileIdentity) {
+    if ((existingRows as List).isNotEmpty) {
+      return 0;
+    }
+
+    if (!state
+        .profile
+        .hasRequiredProfileIdentity) {
       throw StateError(
         'Complete your business profile before loading presentation listings.',
       );
     }
-    final owner = state.profile.businessName.trim();
-    final rows = await _supabase.from('listings').insert([
+
+    final owner =
+        state.profile.businessName.trim();
+
+    final rows =
+        await _supabase.from('listings').insert([
       {
         'type': 'supply',
-        'material': 'Aluminium machining offcuts',
+        'material':
+            'Aluminium machining offcuts',
         'quantity': 1200,
         'unit': 'kg',
         'location': 'Pulau Pinang',
@@ -412,7 +562,8 @@ class IndustryHubNotifier extends Notifier<IndustryHubState> {
       },
       {
         'type': 'demand',
-        'material': 'Recycled HDPE pellets',
+        'material':
+            'Recycled HDPE pellets',
         'quantity': 800,
         'unit': 'kg',
         'location': 'Selangor',
@@ -424,7 +575,8 @@ class IndustryHubNotifier extends Notifier<IndustryHubState> {
       },
       {
         'type': 'supply',
-        'material': 'Copper wire granules',
+        'material':
+            'Copper wire granules',
         'quantity': 600,
         'unit': 'kg',
         'location': 'Johor',
@@ -435,14 +587,27 @@ class IndustryHubNotifier extends Notifier<IndustryHubState> {
         'owner_id': user.id,
       },
     ]).select();
-    final createdListings = (rows as List)
-        .map(
-          (row) => Listing.fromSupabase(Map<String, dynamic>.from(row as Map)),
-        )
-        .toList();
+
+    final createdListings =
+        (rows as List)
+            .map(
+              (row) => Listing.fromSupabase(
+                Map<String, dynamic>.from(
+                  row as Map,
+                ),
+              ),
+            )
+            .toList();
+
     if (!_disposed) {
-      state = state.copyWith(listings: [...createdListings, ...state.listings]);
+      state = state.copyWith(
+        listings: [
+          ...createdListings,
+          ...state.listings,
+        ],
+      );
     }
+
     return createdListings.length;
   }
 
@@ -456,8 +621,16 @@ class IndustryHubNotifier extends Notifier<IndustryHubState> {
     double? askingPricePerKg,
   }) async {
     final user = await _ensureSignedInUser();
-    if (user == null) throw StateError('Sign in before publishing a listing.');
-    if (!state.profile.hasRequiredProfileIdentity) {
+
+    if (user == null) {
+      throw StateError(
+        'Sign in before publishing a listing.',
+      );
+    }
+
+    if (!state
+        .profile
+        .hasRequiredProfileIdentity) {
       throw StateError(
         'Complete your business profile before publishing a listing.',
       );
@@ -472,20 +645,37 @@ class IndustryHubNotifier extends Notifier<IndustryHubState> {
             'quantity': quantity,
             'unit': unit,
             'location': location.trim(),
-            'description': description.trim(),
-            'asking_price_per_kg': askingPricePerKg,
-            'owner': state.profile.businessName,
+            'description':
+                description.trim(),
+            'asking_price_per_kg':
+                askingPricePerKg,
+            'owner':
+                state.profile.businessName,
             'owner_id': user.id,
           })
           .select()
           .single();
-      final listing = Listing.fromSupabase(
-        Map<String, dynamic>.from(createdRow),
+
+      final listing =
+          Listing.fromSupabase(
+        Map<String, dynamic>.from(
+          createdRow,
+        ),
       );
+
       if (_disposed) return;
-      state = state.copyWith(listings: [listing, ...state.listings]);
+
+      state = state.copyWith(
+        listings: [
+          listing,
+          ...state.listings,
+        ],
+      );
     } catch (error) {
-      debugPrint('IndustryHub Supabase listing creation failed: $error');
+      debugPrint(
+        'IndustryHub Supabase listing creation failed: $error',
+      );
+
       rethrow;
     }
   }
@@ -501,7 +691,12 @@ class IndustryHubNotifier extends Notifier<IndustryHubState> {
     double? askingPricePerKg,
   }) async {
     final user = await _ensureSignedInUser();
-    if (user == null) throw StateError('Sign in before updating a listing.');
+
+    if (user == null) {
+      throw StateError(
+        'Sign in before updating a listing.',
+      );
+    }
 
     try {
       final updatedRow = await _supabase
@@ -512,53 +707,99 @@ class IndustryHubNotifier extends Notifier<IndustryHubState> {
             'quantity': quantity,
             'unit': unit,
             'location': location.trim(),
-            'description': description.trim(),
-            'asking_price_per_kg': askingPricePerKg,
+            'description':
+                description.trim(),
+            'asking_price_per_kg':
+                askingPricePerKg,
           })
           .eq('id', id)
           .eq('owner_id', user.id)
           .select()
           .single();
-      final updatedListing = Listing.fromSupabase(
-        Map<String, dynamic>.from(updatedRow),
+
+      final updatedListing =
+          Listing.fromSupabase(
+        Map<String, dynamic>.from(
+          updatedRow,
+        ),
       );
+
       if (_disposed) return;
+
       state = state.copyWith(
         listings: state.listings
-            .map((listing) => listing.id == id ? updatedListing : listing)
+            .map(
+              (listing) =>
+                  listing.id == id
+                      ? updatedListing
+                      : listing,
+            )
             .toList(),
       );
     } catch (error) {
-      debugPrint('IndustryHub Supabase listing update failed: $error');
+      debugPrint(
+        'IndustryHub Supabase listing update failed: $error',
+      );
+
       rethrow;
     }
   }
 
-  Future<void> removeListing(String id) async {
+  Future<void> removeListing(
+    String id,
+  ) async {
     final user = await _ensureSignedInUser();
-    if (user == null) throw StateError('Sign in before removing a listing.');
+
+    if (user == null) {
+      throw StateError(
+        'Sign in before removing a listing.',
+      );
+    }
 
     try {
-      await _supabase.rpc('withdraw_listing', params: {'p_listing_id': id});
+      await _supabase.rpc(
+        'withdraw_listing',
+        params: {
+          'p_listing_id': id,
+        },
+      );
+
       if (_disposed) return;
+
       state = state.copyWith(
-        listings: state.listings.where((item) => item.id != id).toList(),
+        listings: state.listings
+            .where(
+              (item) => item.id != id,
+            )
+            .toList(),
       );
     } catch (error) {
-      debugPrint('IndustryHub Supabase listing removal failed: $error');
+      debugPrint(
+        'IndustryHub Supabase listing removal failed: $error',
+      );
+
       rethrow;
     }
   }
 
-  Future<Set<String>> fetchSavedMatchIds() async {
+  Future<Set<String>>
+      fetchSavedMatchIds() async {
     final user = await _ensureSignedInUser();
-    if (user == null) return const <String>{};
+
+    if (user == null) {
+      return const <String>{};
+    }
+
     final rows = await _supabase
         .from('saved_matches')
         .select('programme_id')
         .eq('user_id', user.id);
+
     return (rows as List)
-        .map((row) => (row as Map)['programme_id'])
+        .map(
+          (row) =>
+              (row as Map)['programme_id'],
+        )
         .whereType<String>()
         .toSet();
   }
@@ -571,25 +812,47 @@ class IndustryHubNotifier extends Notifier<IndustryHubState> {
     required String sourceName,
   }) async {
     final user = await _ensureSignedInUser();
+
     if (user == null) {
-      throw StateError('Sign in before saving a training match.');
+      throw StateError(
+        'Sign in before saving a training match.',
+      );
     }
-    if (!state.profile.hasRequiredProfileIdentity) {
+
+    if (!state
+        .profile
+        .hasRequiredProfileIdentity) {
       throw StateError(
         'Complete your business profile before saving skill-match recommendations.',
       );
     }
 
-    await _supabase.from('saved_matches').upsert({
-      'user_id': user.id,
-      'programme_id': programmeId,
-      'programme_name': programmeName,
-      'provider': provider,
-      'source_url': sourceUrl,
-      'source_name': sourceName,
-    }, onConflict: 'user_id,programme_id');
-    final count = await _countOwnRows('saved_matches', user.id);
-    if (!_disposed) state = state.copyWith(savedMatches: count);
+    await _supabase
+        .from('saved_matches')
+        .upsert(
+      {
+        'user_id': user.id,
+        'programme_id': programmeId,
+        'programme_name':
+            programmeName,
+        'provider': provider,
+        'source_url': sourceUrl,
+        'source_name': sourceName,
+      },
+      onConflict:
+          'user_id,programme_id',
+    );
+
+    final count = await _countOwnRows(
+      'saved_matches',
+      user.id,
+    );
+
+    if (!_disposed) {
+      state = state.copyWith(
+        savedMatches: count,
+      );
+    }
   }
 
   Future<void> saveNegotiation({
@@ -605,34 +868,57 @@ class IndustryHubNotifier extends Notifier<IndustryHubState> {
     required bool hasLiveEvidence,
   }) async {
     final user = await _ensureSignedInUser();
+
     if (user == null) {
-      throw StateError('Sign in before saving a price session.');
+      throw StateError(
+        'Sign in before saving a price session.',
+      );
     }
-    if (!state.profile.hasRequiredProfileIdentity) {
+
+    if (!state
+        .profile
+        .hasRequiredProfileIdentity) {
       throw StateError(
         'Complete your business profile before saving a FairPrice recommendation.',
       );
     }
 
-    await _supabase.from('fair_price_sessions').insert({
+    await _supabase
+        .from('fair_price_sessions')
+        .insert({
       'user_id': user.id,
       'product': product.trim(),
       'quantity': quantity,
-      'proposed_price': proposedPrice,
+      'proposed_price':
+          proposedPrice,
       'floor_price': floorPrice,
       'target_price': targetPrice,
-      'ceiling_price': ceilingPrice,
+      'ceiling_price':
+          ceilingPrice,
       'condition': condition,
-      'collection_terms': collectionTerms,
+      'collection_terms':
+          collectionTerms,
       'strategy': strategy,
-      'has_live_evidence': hasLiveEvidence,
+      'has_live_evidence':
+          hasLiveEvidence,
     });
-    final count = await _countOwnRows('fair_price_sessions', user.id);
-    if (!_disposed) state = state.copyWith(negotiations: count);
+
+    final count = await _countOwnRows(
+      'fair_price_sessions',
+      user.id,
+    );
+
+    if (!_disposed) {
+      state = state.copyWith(
+        negotiations: count,
+      );
+    }
   }
 }
 
 final appStateProvider =
-    NotifierProvider<IndustryHubNotifier, IndustryHubState>(
-      IndustryHubNotifier.new,
-    );
+    NotifierProvider<
+        IndustryHubNotifier,
+        IndustryHubState>(
+  IndustryHubNotifier.new,
+);

@@ -138,7 +138,7 @@ class _SkillMatchScreenState extends ConsumerState<SkillMatchScreen> {
           .fetchSavedMatchIds();
       if (mounted) setState(() => _savedProgrammeIds.addAll(ids));
     } catch (_) {
-      // Saving remains available and reports its own errors.
+
     }
   }
 

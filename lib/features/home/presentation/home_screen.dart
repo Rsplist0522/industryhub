@@ -80,8 +80,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   bool _isUnreadNotification(DealRequestRecord request) {
     if (_isOwnerSide(request)) {
-      // Listing owners need a notification for a new incoming request
-      // or when the requester cancels it.
+
+
       if (request.status != 'REQUEST SENT' && request.status != 'CANCELLED') {
         return false;
       }
@@ -89,8 +89,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       return request.ownerReadAt == null;
     }
 
-    // Requesters only need a new notification when the other business
-    // accepts or rejects the request.
+
+
     if (request.status != 'ACCEPTED' && request.status != 'REJECTED') {
       return false;
     }
@@ -250,9 +250,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 
   Future<void> _openNotification(DealRequestRecord request) async {
-    // Only the notification that the user actually opens
-    // is marked as read. Opening the bell itself does not
-    // clear every notification.
+
+
+
     await _markNotificationRead(request);
 
     if (!mounted) return;

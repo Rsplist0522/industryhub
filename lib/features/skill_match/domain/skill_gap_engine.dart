@@ -2,11 +2,11 @@ import 'dart:math' as math;
 
 import 'skill_models.dart';
 
-/// Pure, deterministic readiness calculation.
-///
-/// For every positively weighted competency, readiness contributes
-/// `weight * min(current / target, 1)`. The weighted contributions are divided
-/// by the sum of valid weights and converted to a percentage.
+
+
+
+
+
 class SkillGapEngine {
   const SkillGapEngine();
 

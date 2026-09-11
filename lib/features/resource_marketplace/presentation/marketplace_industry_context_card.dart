@@ -1,5 +1,5 @@
-// Official Market Context card for M4 ReSource Marketplace.
-// Source: Department of Statistics Malaysia through data.gov.my.
+
+
 
 import 'package:flutter/material.dart';
 

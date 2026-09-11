@@ -184,13 +184,13 @@ class MarketPriceRepository {
         );
       }
     } catch (_) {
-      // Continue to the direct public data.gov.my request.
+
     }
     try {
       final dataGovRecord = await _fetchLatestMalaysiaPpiFromDataGovMy();
       if (dataGovRecord != null) return dataGovRecord;
     } catch (_) {
-      // Continue to the DOSM CSV fallback if the catalogue is unavailable.
+
     }
     return _fetchLatestMalaysiaPpiFromPublicCsv();
   }

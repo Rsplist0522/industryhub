@@ -12,9 +12,9 @@ class LocalDatabase {
   static const String _notesTable = 'notes';
   static const String _preferencesTable = 'preferences';
 
-  // ============================================================
-  // DATABASE
-  // ============================================================
+
+
+
 
   static Future<Database> get database async {
     final existingDatabase = _database;
@@ -47,9 +47,9 @@ class LocalDatabase {
     return database;
   }
 
-  // ============================================================
-  // TABLE CREATION
-  // ============================================================
+
+
+
 
   static Future<void> _createTables(Database database) async {
     await database.execute('''
@@ -74,9 +74,9 @@ class LocalDatabase {
     ''');
   }
 
-  // ============================================================
-  // DATABASE MIGRATION
-  // ============================================================
+
+
+
 
   static Future<void> _upgradeDatabase(
     Database database,
@@ -101,11 +101,11 @@ class LocalDatabase {
     }
   }
 
-  /// Moves preferences previously stored as:
-  ///
-  /// preference:key=value
-  ///
-  /// from the notes table into the new preferences table.
+
+
+
+
+
   static Future<void> _migrateLegacyPreferences(
     Database database,
   ) async {
@@ -172,9 +172,9 @@ class LocalDatabase {
     );
   }
 
-  // ============================================================
-  // NOTES
-  // ============================================================
+
+
+
 
   static Future<int> addNote(String text) async {
     final database = await LocalDatabase.database;
@@ -274,9 +274,9 @@ class LocalDatabase {
     return Sqflite.firstIntValue(result) ?? 0;
   }
 
-  // ============================================================
-  // PREFERENCES
-  // ============================================================
+
+
+
 
   static Future<void> savePreference(
     String key,
@@ -363,9 +363,9 @@ class LocalDatabase {
     return database.delete(_preferencesTable);
   }
 
-  // ============================================================
-  // CONNECTION
-  // ============================================================
+
+
+
 
   static Future<void> close() async {
     final database = _database;

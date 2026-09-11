@@ -101,8 +101,8 @@ class ProgrammeRankingEngine {
       ),
     ];
 
-    // Missing catalogue fields are excluded and the remaining published
-    // weights are normalised. They are never replaced with invented values.
+
+
     var weightedScore = 0.0;
     var availableWeight = 0.0;
     for (final component in components.where((item) => item.score != null)) {

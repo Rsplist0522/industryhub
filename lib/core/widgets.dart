@@ -240,11 +240,11 @@ class AppShell extends StatefulWidget {
   final List<Widget>? actions;
   final bool showBack;
   final Widget? bottomNavigationBar;
-  // Where "back" should land when there is nothing left to pop, e.g. when a
-  // screen was reached via context.go() (which clears the navigation stack)
-  // rather than context.push(). automaticallyImplyLeading alone can't do
-  // this — it only shows a back arrow if canPop() is already true, so a
-  // page opened with go() silently loses its back button.
+
+
+
+
+
   final String fallbackRoute;
 
 
@@ -310,7 +310,7 @@ class _AppShellState extends State<AppShell> {
             key: _scaffoldKey,
             appBar: AppBar(
               automaticallyImplyLeading: false,
-              leadingWidth: widget.showBack ? 96 : 56, // 👈 add this
+              leadingWidth: widget.showBack ? 96 : 56,
               leading: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -335,11 +335,11 @@ class _AppShellState extends State<AppShell> {
                 padding: EdgeInsets.zero,
                 children: [
                   Container(
-                    height: 72, // thinner than DrawerHeader's default ~160
+                    height: 72,
                     width: double.infinity,
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                     alignment: Alignment.centerLeft,
-                    decoration: const BoxDecoration(color: AppColors.navy), // same blue as the dashboard
+                    decoration: const BoxDecoration(color: AppColors.navy),
                     child: const Text(
                       'Menu',
                       style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
@@ -404,11 +404,11 @@ class _NavItem {
 }
 
 
-/// Shared bottom navigation for the three main modules. Previously each
-/// screen (Marketplace, Home, Profile) built its own NavigationBar with
-/// slightly different destinations/ordering; this is the single source of
-/// truth so the bottom bar — and by extension the whole shell — looks and
-/// behaves the same everywhere.
+
+
+
+
+
 class AppBottomNav extends ConsumerWidget {
   const AppBottomNav({super.key, required this.currentIndex});
 

@@ -41,7 +41,7 @@ class MsicRepository {
           .toList();
       if (sectors.isNotEmpty) return sectors;
     } catch (_) {
-      // Fall back to the public DOSM API below.
+
     }
 
     final response = await _client

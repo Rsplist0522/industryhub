@@ -1,5 +1,5 @@
-// Supabase access for the live IndustryHub SkillMatch programme catalogue.
-// Records are populated from the Dart live-data importer and ranked by SkillMatch.
+
+
 
 import 'dart:convert';
 
@@ -149,8 +149,8 @@ class TrainingProgrammeRepository {
             .toList(growable: false);
       }
     } catch (_) {
-      // The public API below keeps government evidence available if Supabase
-      // has not been populated yet.
+
+
     }
 
     final response = await _client

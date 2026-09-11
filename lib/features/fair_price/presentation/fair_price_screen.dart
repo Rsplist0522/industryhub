@@ -1,6 +1,6 @@
-// M2 FairPrice for IndustryHub.
-// Accepted Marketplace requests can open this screen with a DealRequestRecord.
-// Known deal details are pre-filled so the user does not type them again.
+
+
+
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -224,8 +224,8 @@ class _FairPriceScreenState extends ConsumerState<FairPriceScreen> {
     if (deal.askingPricePerKg != null && deal.askingPricePerKg! > 0) {
       _price.text = deal.askingPricePerKg!.toStringAsFixed(2);
     } else {
-      // Do not invent a price. Only unknown information remains for
-      // the user to enter.
+
+
       _price.clear();
     }
 

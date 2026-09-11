@@ -1,6 +1,6 @@
-// M3 ReSource Profile for IndustryHub.
-// Design intent: provide a clear, trustworthy business identity and safe listing
-// management backed by the signed-in user's Supabase workspace.
+
+
+
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -13,7 +13,7 @@ import '../../../core/widgets.dart';
 import '../../../core/validators.dart';
 import '../data/msic_repository.dart';
 
-// Listing helper constants and validators for Add/Edit dialogs.
+
 const List<String> _suggestedMaterials = [
   'Sawdust',
   'Wood offcuts',
@@ -74,9 +74,9 @@ String? _priceValidator(String? value) {
 
 String? _cityValidator(String? value) {
   final text = value?.trim() ?? '';
-  if (text.isEmpty) return null; // optional
+  if (text.isEmpty) return null;
   if (text.length > 80) return 'City/District cannot exceed 80 characters.';
-  // keep validation permissive: only enforce max length; accept any user-provided city/district text
+
   return null;
 }
 
@@ -152,7 +152,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       emailVerified =
           Supabase.instance.client.auth.currentUser?.emailConfirmedAt != null;
     } catch (_) {
-      // Isolated widget tests can render without an initialised Supabase client.
+
     }
 
     return AppShell(
@@ -466,7 +466,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     var unit = 'kg';
     String selectedState = _malaysiaStates.first;
 
-        // per-field focus and touched state for progressive validation
+
         final materialFocus = FocusNode();
         final quantityFocus = FocusNode();
         final priceFocus = FocusNode();
@@ -479,14 +479,14 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         var touchedCity = false;
         var touchedDescription = false;
 
-        // per-field "changed by user" flags
+
         var materialChanged = false;
         var quantityChanged = false;
         var priceChanged = false;
         var cityChanged = false;
         var descriptionChanged = false;
 
-        // listener attached guards
+
         var quantityListenerAttached = false;
         var priceListenerAttached = false;
         var cityListenerAttached = false;
@@ -535,7 +535,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                           ),
                           const SizedBox(height: 12),
 
-                          // Material with simple autocomplete suggestions
+
                           Autocomplete<String>(
                             optionsBuilder: (TextEditingValue textEditingValue) {
                               final input = textEditingValue.text.trim();
@@ -548,17 +548,17 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                                 controller.selection = TextSelection.fromPosition(TextPosition(offset: controller.text.length));
                               }
                               controller.addListener(() {
-                                // mark changed when user alters the controller value
+
                                 if (!materialChanged && controller.text != (material.text)) {
                                   materialChanged = true;
                                 }
                                 material.text = controller.text;
-                                // show error only if user has changed text and the value is invalid
+
                                 if (materialChanged && _materialValidator(controller.text) != null) {
                                   setDialogState(() => touchedMaterial = true);
                                 }
                               });
-                              // attach listener to the persistent focus node used for final focus handling
+
                               materialFocus.addListener(() {
                                 if (!materialFocus.hasFocus) {
                                   if (_materialValidator(material.text) != null) setDialogState(() => touchedMaterial = true);
@@ -584,7 +584,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                               Expanded(
                                 child: Builder(
                                   builder: (context) {
-                                    // Attach a blur listener once
+
                                     if (!quantityListenerAttached) {
                                       quantityFocus.addListener(() {
                                         if (!quantityFocus.hasFocus) {
@@ -653,7 +653,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                           ),
 
                           const SizedBox(height: 12),
-                          // Location: state dropdown + optional city
+
                           DropdownButtonFormField<String>(
                             initialValue: selectedState,
                             decoration: const InputDecoration(labelText: 'State / Federal Territory *'),
@@ -734,7 +734,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 ),
                 FilledButton(
                   onPressed: () {
-                    // Final validation across all required fields
+
                     final materialText = material.text.trim();
                     final qtyText = quantity.text.trim();
                     setDialogState(() {
@@ -746,7 +746,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     });
 
                     if (materialText.isEmpty || _materialValidator(materialText) != null || _quantityValidator(qtyText, unit) != null || _priceValidator(askingPricePerKg.text) != null) {
-                      // Focus first invalid field
+
                       if (_materialValidator(materialText) != null) {
                         materialFocus.requestFocus();
                       } else if (_quantityValidator(qtyText, unit) != null) {
@@ -783,14 +783,14 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           ),
         );
 
-    // Let the modal route finish disposing before Riverpod rebuilds Profile.
-    // Its TextFormFields still depend on these controllers during the close
-    // animation, so dispose them only after the route is completely gone.
+
+
+
     await Future<void>.delayed(const Duration(milliseconds: 300));
     material.dispose();
     quantity.dispose();
-    // city controller replaced location for the new form
-    // (if city exists it will be disposed below in the edit path)
+
+
     try {
       city.dispose();
     } catch (_) {}
@@ -799,7 +799,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
 
     if (draft == null || !mounted) return;
 
-    // Prevent duplicate material listings for the same user: ask to update existing or cancel
+
     final stateNow = ref.read(appStateProvider);
     final userId = stateNow.userId;
     final normalized = draft.material.trim().toLowerCase();
@@ -896,7 +896,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     var type = listing.type == 'demand' ? 'demand' : 'supply';
     var unit = _allUnits.contains(listing.unit) ? listing.unit : 'kg';
 
-    // Parse initial location into state and city if possible
+
     String selectedState = _malaysiaStates.first;
     if (listing.location.trim().isNotEmpty) {
       final parts = listing.location.split(',');
@@ -1109,7 +1109,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             ),
             FilledButton(
               onPressed: () {
-                // final validation
+
                 setDialogState(() {
                   touchedMaterialEdit = true;
                   touchedQuantityEdit = true;

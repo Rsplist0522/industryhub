@@ -64,7 +64,7 @@ class _SplashScreenState extends State<SplashScreen> {
         await client.auth.signOut();
       }
     } catch (_) {
-      // Widget tests or an interrupted bootstrap are treated as signed out.
+
     }
     if (!mounted) return;
     if (!hasVerifiedSession) {
@@ -167,7 +167,7 @@ class _LoginScreenState extends State<LoginScreen> {
         try {
           await Supabase.instance.client.auth.signOut();
         } catch (_) {
-          // A rejected sign-in normally has no local session to clear.
+
         }
       }
       if (mounted) {
@@ -457,7 +457,7 @@ class EmailConfirmedScreen extends StatelessWidget {
     try {
       await Supabase.instance.client.auth.signOut();
     } catch (_) {
-      // Confirmation can succeed without a persisted local session.
+
     }
     if (context.mounted) context.go('/login');
   }

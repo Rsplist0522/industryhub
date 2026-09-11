@@ -44,7 +44,7 @@ class AuthStateRefreshNotifier extends ChangeNotifier {
         (_) => notifyListeners(),
       );
     } catch (_) {
-      // Supabase may not be initialised in isolated widget tests.
+
     }
   }
 
@@ -65,7 +65,7 @@ GoRouter createAppRouter({Listenable? refreshListenable}) => GoRouter(
     try {
       hasVerifiedSession = hasVerifiedSupabaseSession(Supabase.instance.client);
     } catch (_) {
-      // Supabase may not be initialised yet in isolated widget tests.
+
     }
     return protectedRouteRedirect(
       matchedLocation: state.matchedLocation,

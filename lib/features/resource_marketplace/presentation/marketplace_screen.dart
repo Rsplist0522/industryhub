@@ -111,9 +111,9 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
     super.dispose();
   }
 
-  // Live Supabase Realtime subscriptions replace the old "fetch once, wait
-  // for a manual refresh" flow: outgoing status changes (accepted/rejected/
-  // cancelled) and new incoming requests now update the screen on their own.
+
+
+
   void _subscribeToRequests() {
     setState(() {
       _isLoadingHistory = true;
@@ -477,8 +477,8 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
 
       if (!mounted) return;
 
-      // Reconnect the live request streams so the request inbox/history is
-      // refreshed together with the marketplace listings.
+
+
       _subscribeToRequests();
 
       await _loadIndustrialContext(
@@ -526,8 +526,8 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
           ],
           icon: const Icon(Icons.sort_outlined),
         ),
-        // Keep this in M4: it is a pending-work counter, not the global
-        // unread-notification counter shown on the Home dashboard.
+
+
         IconButton(
           icon: Badge.count(
             count: _pendingIncomingCount,
@@ -735,8 +735,8 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
             ),
           ),
 
-          // Visual separation between Marketplace AI and the official
-          // public/regional dataset section.
+
+
           const SizedBox(height: 24),
 
           DropdownButtonFormField<String>(
@@ -836,21 +836,21 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
       _verifiedOnly ||
       _minimumQuantity > 0;
 
-  /// A match score is only meaningful when the user has actually supplied
-  /// something to match against. This prevents every unfiltered listing from
-  /// showing an arbitrary baseline percentage.
+
+
+
   bool get _hasMatchCriteria =>
       _search.text.trim().isNotEmpty ||
       _filter != 'all' ||
       _hasAdvancedFilters;
 
-  /// Returns marketplace listings using PARTIAL-MATCH behaviour.
-  ///
-  /// When no search/filter criteria are active, every listing is shown.
-  /// When criteria are active, a listing stays visible as long as it matches
-  /// at least one active criterion. This is intentional: the match percentage
-  /// then tells the user how closely each listing fits the full set of
-  /// requirements instead of hiding every imperfect alternative.
+
+
+
+
+
+
+
   List<Listing> _filteredListings(List<Listing> source) {
     final filtered = _hasMatchCriteria
         ? source.where((listing) => _matchScore(listing) > 0).toList()
@@ -877,8 +877,8 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
         );
         break;
       case 'default':
-        // Once criteria are selected, ranking partial matches by score is the
-        // most useful default. Without criteria, keep the original order.
+
+
         if (_hasMatchCriteria) {
           filtered.sort((a, b) {
             final scoreComparison =
@@ -892,20 +892,20 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
     return filtered;
   }
 
-  /// Calculates a transparent 0-100 match score using only criteria that
-  /// the user has actively selected.
-  ///
-  /// Weighting:
-  /// - Search text:        40 points
-  /// - Material filter:    20 points
-  /// - Location filter:    15 points
-  /// - Supply/demand type: 10 points
-  /// - Verified only:      10 points
-  /// - Minimum quantity:    5 points
-  ///
-  /// The denominator contains only active criteria. A listing that satisfies
-  /// every active criterion receives 100%. A listing that satisfies only some
-  /// criteria remains visible with a lower percentage.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
   int _matchScore(Listing listing) {
     if (!_hasMatchCriteria) return 0;
 
@@ -961,9 +961,9 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
         .toInt();
   }
 
-  /// Gives the search-text portion of the score a different strength based on
-  /// where the query matched. A material match is strongest because the
-  /// marketplace primarily connects material supply and demand.
+
+
+
   double _queryMatchPoints(Listing listing, String query) {
     final material = listing.material.toLowerCase();
     final location = listing.location.toLowerCase();
@@ -979,8 +979,8 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
     return 0;
   }
 
-  /// Explains the strongest reasons behind the displayed match score so the
-  /// percentage is not a black-box number.
+
+
   String _matchLabel(Listing listing) {
     if (!_hasMatchCriteria) {
       return 'No match criteria selected';
@@ -1254,7 +1254,7 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
       ),
     );
 
-    // Keep the controller alive until the modal route has fully closed.
+
     await Future<void>.delayed(const Duration(milliseconds: 300));
     note.dispose();
     if (submittedNote == null || !mounted) return;
@@ -1627,9 +1627,9 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
                                     ],
                                   ),
 
-                                  // Transaction history is a persistent record,
-                                  // but completed outcomes should still give the
-                                  // user a sensible next action.
+
+
+
                                   if (request.status == 'ACCEPTED') ...[
                                     const SizedBox(height: 10),
                                     Container(
@@ -1732,10 +1732,10 @@ class _MarketplaceScreenState extends ConsumerState<MarketplaceScreen> {
                                       width: double.infinity,
                                       child: FilledButton.icon(
                                         onPressed: () {
-                                          // Transaction history is already opened
-                                          // on top of the Marketplace screen, so
-                                          // closing the sheet returns directly to
-                                          // the marketplace results.
+
+
+
+
                                           Navigator.pop(sheetContext);
                                         },
                                         icon: const Icon(

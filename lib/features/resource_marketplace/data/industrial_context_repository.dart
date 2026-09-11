@@ -1,6 +1,6 @@
-// Official Market Context: retrieves state-level manufacturing GDP data
-// from Malaysia's data.gov.my catalogue API. It is contextual only and
-// must not be used to calculate or override Marketplace listing matches.
+
+
+
 
 import 'dart:convert';
 
@@ -32,9 +32,9 @@ class IndustrialContextRepository {
   final http.Client _client;
   final Map<String, IndustrialContext?> _cache = {};
 
-  /// Returns the newest official manufacturing GDP record for the state
-  /// recognised inside [marketplaceLocation]. For example, "Bayan Lepas,
-  /// Penang" maps to the official state label "Pulau Pinang".
+
+
+
   Future<IndustrialContext?> fetchManufacturingContext({required String marketplaceLocation}) async {
     final state = _normaliseState(marketplaceLocation);
     if (state == null) return null;

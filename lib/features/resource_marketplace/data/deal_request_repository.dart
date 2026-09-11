@@ -1,4 +1,4 @@
-// Supabase persistence for M4 Marketplace deal requests and notifications.
+
 
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -35,18 +35,18 @@ class DealRequestRecord {
   final String requesterName;
   final String location;
 
-  // Human-readable snapshot retained for transaction history.
+
   final String quantity;
 
-  // Structured deal snapshot used to pre-fill FairPrice.
+
   final double? quantityValue;
   final String unit;
   final double? askingPricePerKg;
 
   final String note;
 
-  // For a rejected request this contains the required decline category,
-  // followed by an optional additional note.
+
+
   final String responseNote;
 
   final String status;
@@ -338,7 +338,7 @@ class DealRequestRepository {
       return Stream<List<DealRequestRecord>>.value(const []);
     }
 
-    // RLS already limits this stream to requests involving the signed-in user.
+
     return _supabase
         .from('deal_requests')
         .stream(primaryKey: ['id'])
