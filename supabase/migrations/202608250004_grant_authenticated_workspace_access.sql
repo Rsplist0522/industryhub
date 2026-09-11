@@ -1,5 +1,3 @@
--- Restore the table privileges required by the Flutter client.
--- Row Level Security remains active; these grants do not bypass ownership policies.
 
 grant usage on schema public to authenticated;
 grant select, insert, update, delete on table public.profiles to authenticated;

@@ -1,6 +1,3 @@
-// Copyright 2014 The Flutter Authors. All rights reserved.
-// Use of this source code is governed by a BSD-style license that can be
-// found in the LICENSE file.
 
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
@@ -81,9 +78,7 @@ class _ContainingPackageSearchFilter extends _SearchFilterConfig {
   bool onToggle() => _controller.toggleSearchByContainingPackage();
 }
 
-/// Provides controls to change the zoom level of a [WidgetPreview].
 class ZoomControls extends StatelessWidget {
-  /// Provides controls to change the zoom level of a [WidgetPreview].
   const ZoomControls({super.key, required this._transformationController});
 
   static const double _minScale = 1.0;
@@ -204,7 +199,6 @@ class _ControlDecorator extends StatelessWidget {
   }
 }
 
-/// Allows for controlling the grid vs layout view in the preview environment.
 class LayoutTypeSelector extends StatelessWidget {
   const LayoutTypeSelector({super.key, required this.controller});
 
@@ -260,7 +254,6 @@ class WidgetInspectorToggle extends StatelessWidget {
             style: theme.iconButtonTheme.style,
             visualDensity: VisualDensity.compact,
             onPressed: controller.toggleWidgetInspectorVisible,
-            // TODO(bkonyi): replace with widget inspector icon.
             icon: Icon(Icons.image_search),
             color: widgetInspectorVisible ? Colors.blue : Colors.black,
           );
@@ -270,10 +263,6 @@ class WidgetInspectorToggle extends StatelessWidget {
   }
 }
 
-/// A toggle button that enables / disables filtering previews by the currently
-/// selected source file.
-///
-/// This control is hidden if the DTD Editor service isn't available.
 class FilterBySelectedFileToggle extends StatelessWidget {
   const FilterBySelectedFileToggle({super.key, required this.controller});
 
@@ -300,11 +289,6 @@ class FilterBySelectedFileToggle extends StatelessWidget {
   }
 }
 
-/// A button that triggers a "soft" restart of a previewed widget.
-///
-/// A soft restart removes the previewed widget from the widget tree for a frame before
-/// re-inserting it on the next frame. This has the effect of re-running local initializers in
-/// State objects, which normally requires a hot restart to accomplish in a normal application.
 class SoftRestartButton extends StatelessWidget {
   const SoftRestartButton({super.key, required this.softRestartListenable});
 
@@ -327,8 +311,6 @@ class SoftRestartButton extends StatelessWidget {
   }
 }
 
-/// A button that triggers a restart of the widget previewer through a hot restart request made
-/// through DTD.
 class WidgetPreviewerRestartButton extends StatelessWidget {
   const WidgetPreviewerRestartButton({super.key, required this.controller});
 
@@ -347,10 +329,6 @@ class WidgetPreviewerRestartButton extends StatelessWidget {
   }
 }
 
-/// Controls for searching and filtering widget previews.
-///
-/// This widget combines a text query field with a popup menu for selecting
-/// which preview fields are included in search.
 class PreviewSearchControls extends StatefulWidget {
   const PreviewSearchControls({super.key, required this.controller});
 
@@ -563,7 +541,6 @@ extension on Brightness {
   bool get isLight => this == Brightness.light;
 }
 
-/// A button that toggles the current theme brightness.
 class BrightnessToggleButton extends StatelessWidget {
   const BrightnessToggleButton({super.key, required this.brightnessListenable});
 

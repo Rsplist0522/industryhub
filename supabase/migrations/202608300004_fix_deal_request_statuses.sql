@@ -1,4 +1,3 @@
--- Keep the database status values aligned with the marketplace workflow.
 
 alter table public.deal_requests
   drop constraint if exists deal_requests_status_check;

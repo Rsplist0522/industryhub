@@ -1,6 +1,3 @@
--- Remove only the demo records inserted by the previous IndustryHub seed migration.
--- This is intentionally narrow so user-created marketplace/profile records are preserved.
--- Run after 202608230001_industryhub_core.sql on an existing project.
 
 delete from public.training_programmes
 where id in ('cnc-setup', 'lean-essentials', 'quality-systems', 'welding-safety', 'supervision');

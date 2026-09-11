@@ -1,4 +1,3 @@
--- Repair existing deployments so listing owners can decline incoming requests.
 
 alter table public.deal_requests
   add column if not exists response_note text not null default '';

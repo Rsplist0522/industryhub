@@ -1,6 +1,3 @@
-// Copyright 2014 The Flutter Authors. All rights reserved.
-// Use of this source code is governed by a BSD-style license that can be
-// found in the LICENSE file.
 
 import 'dart:async';
 
@@ -9,43 +6,30 @@ import 'package:flutter/foundation.dart';
 import 'package:widget_preview_scaffold/src/dtd/dtd_services.dart';
 import 'package:widget_preview_scaffold/src/dtd/utils.dart';
 
-/// Provides support for interacting with the Editor DTD service registered by IDE plugins.
 mixin DtdEditorService {
   DartToolingDaemon get dtd;
 
-  /// The name of the Editor service.
   static const String kEditorService = 'Editor';
 
-  /// The name of the Editor's getActiveLocation method.
   static const String kGetActiveLocation = 'getActiveLocation';
 
-  /// The name of the Editor's navigateToCode method.
   static const String kNavigateToCode = 'navigateToCode';
 
-  /// The name of the DTD Service stream.
   static const String kServiceStream = 'Service';
 
-  /// The kind of the event sent over the [kServiceStream] stream when a new
-  /// service method is registered.
   static const kServiceRegistered = 'ServiceRegistered';
 
-  /// The kind of the event sent over the [kServiceStream] stream when a
-  /// service method is unregistered.
   static const kServiceUnregistered = 'ServiceUnregistered';
 
-  /// Whether or not the Editor service is available.
   ValueListenable<bool> get editorServiceAvailable => _editorServiceAvailable;
   static final _editorServiceAvailable = ValueNotifier<bool>(false);
 
-  /// The currently selected source file in the IDE.
   ValueListenable<TextDocument?> get selectedSourceFile => _selectedSourceFile;
   static final _selectedSourceFile = ValueNotifier<TextDocument?>(null);
 
-  /// The current theming set in the IDE.
   ValueListenable<EditorTheme?> get editorTheme => _editorTheme;
   static final _editorTheme = ValueNotifier<EditorTheme?>(null);
 
-  /// Start listening for events on the Editor stream.
   Future<void> initializeEditorService(
     WidgetPreviewScaffoldDtdServices dtdServices,
   ) async {
@@ -53,8 +37,6 @@ mixin DtdEditorService {
     dtd.onEvent(kEditorService).listen((data) {
       final kind = editorKindMap[data.kind];
       switch (kind) {
-        // Unknown event. Use null here so we get exhaustiveness checking for
-        // the rest.
         case null:
           break;
         case EditorEventKind.themeChanged:
@@ -76,7 +58,6 @@ mixin DtdEditorService {
             DtdParameters.method: kGetActiveLocation,
           },
         ):
-          // Manually retrieve the currently selected source file.
           unawaited(_updateSelectedSourceFile());
           _editorServiceAvailable.value = true;
         case DTDEvent(
@@ -110,9 +91,6 @@ mixin DtdEditorService {
     }
   }
 
-  /// Tells the editor to navigate to a given code [location].
-  ///
-  /// Only locations with `file://` URIs are valid.
   Future<void> navigateToCode(CodeLocation location) async {
     await dtd.safeCall(
       kEditorService,
@@ -122,32 +100,17 @@ mixin DtdEditorService {
   }
 }
 
-// TODO(bkonyi): much of the following code is copied from the DevTools codebase. We should publish
-// a package containing these DTD services. See https://github.com/flutter/devtools/issues/9306.
 
-/// Known kinds of events that may come from the editor.
-///
-/// This list is not guaranteed to match actual events from any given editor as
-/// the editor might not implement all functionality or may be a future version
-/// running against an older version of this code/DevTools.
 enum EditorEventKind {
-  /// The kind for a [ThemeChangedEvent].
   themeChanged,
 
-  /// The kind for an [ActiveLocationChangedEvent] event.
   activeLocationChanged,
 }
 
-/// A base class for all known events that an editor can produce.
-///
-/// The set of subclasses is not guaranteed to match actual events from any
-/// given editor as the editor might not implement all functionality or may be a
-/// future version running against an older version of this code/DevTools.
 sealed class EditorEvent {
   EditorEventKind get kind;
 }
 
-/// UI settings for an editor's theme.
 class EditorTheme {
   EditorTheme({
     required this.isDarkMode,
@@ -193,7 +156,6 @@ class ThemeChangedEvent extends EditorEvent {
   Map<String, Object?> toJson() => {Field.theme: theme};
 }
 
-/// An event sent by an editor when the current cursor position/s change.
 class ActiveLocationChangedEvent extends ActiveLocation implements EditorEvent {
   ActiveLocationChangedEvent({required ActiveLocation activeLocation})
     : super(
@@ -233,12 +195,6 @@ class ActiveLocation {
   };
 }
 
-/// A reference to a text document in the editor.
-///
-/// The [uriAsString] is a file URI to the text document.
-///
-/// The [version] is an integer corresponding to LSP's
-/// [VersionedTextDocumentIdentifier](https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#versionedTextDocumentIdentifier)
 class TextDocument {
   TextDocument({required this.uriAsString, required this.version});
 
@@ -267,7 +223,6 @@ class TextDocument {
   int get hashCode => Object.hash(uriAsString, version);
 }
 
-/// The starting and ending cursor positions in the editor.
 class EditorSelection {
   EditorSelection({required this.active, required this.anchor});
 
@@ -290,7 +245,6 @@ class EditorSelection {
   };
 }
 
-/// A range in the editor expressed as (zero-based) start and end positions.
 class EditorRange {
   EditorRange({required this.start, required this.end});
 
@@ -302,10 +256,8 @@ class EditorRange {
         end: CursorPosition.fromJson(map[Field.end] as Map<String, Object?>),
       );
 
-  /// The range's start position.
   final CursorPosition start;
 
-  /// The range's end position.
   final CursorPosition end;
 
   Map<String, Object?> toJson() => {
@@ -314,9 +266,6 @@ class EditorRange {
   };
 }
 
-/// Representation of a single cursor position in the editor.
-///
-/// The cursor position is after the given [character] of the [line].
 class CursorPosition {
   CursorPosition({required this.character, required this.line});
 
@@ -326,10 +275,8 @@ class CursorPosition {
         line: map[Field.line] as int,
       );
 
-  /// The zero-based character number of this position.
   final int character;
 
-  /// The zero-based line number of this position.
   final int line;
 
   Map<String, Object?> toJson() => {
@@ -348,22 +295,13 @@ class CursorPosition {
   int get hashCode => Object.hash(character, line);
 }
 
-/// Parameters for the `navigateToCode` request.
 class CodeLocation {
   const CodeLocation({required this.uri, this.line, this.column});
 
-  /// The URI of the location to navigate to. Only `file://` URIs are supported
-  /// unless the service registration's `capabilities` indicate other schemes
-  /// are supported.
-  ///
-  /// Editors should return error code 144 if a caller passes a URI with an
-  /// unsupported scheme.
   final String uri;
 
-  /// Optional 1-based line number to navigate to.
   final int? line;
 
-  /// Optional 1-based column number to navigate to.
   final int? column;
 
   Map<String, Object?> toJson() => {
@@ -373,8 +311,6 @@ class CodeLocation {
   };
 }
 
-/// Constants for all fields used in JSON maps to avoid literal strings that
-/// may have typos sprinkled throughout the API classes.
 abstract class Field {
   static const active = 'active';
   static const anchor = 'anchor';

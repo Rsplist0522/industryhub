@@ -1,5 +1,3 @@
--- M1 SkillMatch diagnostic history and interactive learning roadmaps.
--- This migration is additive and does not alter saved_matches or the catalogue.
 
 create table if not exists public.skill_assessments (
   id uuid primary key default gen_random_uuid(),

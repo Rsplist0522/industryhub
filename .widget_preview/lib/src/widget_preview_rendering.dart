@@ -1,6 +1,3 @@
-// Copyright 2014 The Flutter Authors. All rights reserved.
-// Use of this source code is governed by a BSD-style license that can be
-// found in the LICENSE file.
 
 import 'dart:math' as math;
 
@@ -27,11 +24,6 @@ import 'package:widget_preview_scaffold/src/widget_preview.dart';
 import 'package:widget_preview_scaffold/src/widget_preview_inspector_service.dart';
 import 'package:widget_preview_scaffold/src/widget_preview_scaffold_controller.dart';
 
-/// Displayed when an unhandled exception is thrown when initializing the widget
-/// tree for a preview (i.e., before the build phase).
-///
-/// Provides users with details about the thrown exception, including the exception
-/// contents and a scrollable stack trace.
 class WidgetPreviewErrorWidget extends StatelessWidget {
   WidgetPreviewErrorWidget({
     super.key,
@@ -43,13 +35,10 @@ class WidgetPreviewErrorWidget extends StatelessWidget {
 
   final WidgetPreviewScaffoldController controller;
 
-  /// The [Object] that was thrown, resulting in an unhandled exception.
   final Object error;
 
-  /// The stack trace identifying where [error] was thrown from.
   final Trace trace;
 
-  /// The size of the error widget.
   final Size size;
 
   @override
@@ -99,17 +88,12 @@ class WidgetPreviewErrorWidget extends StatelessWidget {
     List<Frame> frames,
     bool editorServiceAvailable,
   ) {
-    // Figure out the longest path so we know how much to pad.
     final int longest = frames
         .map((frame) => frame.location.length)
         .fold(0, math.max);
 
-    // Print out the stack trace nicely formatted.
     return frames.map<TextSpan>((frame) {
       if (frame is UnparsedFrame) return TextSpan(text: '$frame\n');
-      // The Editor.navigateToCode service can't handle Dart core library paths,
-      // so don't allow for navigation to them. Also disable navigation if the
-      // Editor service isn't available.
       final isLinkable =
           (frame.uri.isScheme('file') || frame.uri.isScheme('package')) &&
           editorServiceAvailable;
@@ -145,9 +129,6 @@ class WidgetPreviewErrorWidget extends StatelessWidget {
   }
 }
 
-/// Displayed when no @Preview() annotations are detected in the project.
-///
-/// Links to documentation.
 class NoPreviewsDetectedWidget extends StatelessWidget {
   const NoPreviewsDetectedWidget({super.key});
 
@@ -178,7 +159,6 @@ class NoPreviewsDetectedWidget extends StatelessWidget {
   }
 }
 
-/// A wrapper that serves as the root entry for a single preview in the widget inspector.
 class PreviewWidget extends StatelessWidget {
   const PreviewWidget({super.key, required this.preview, required this.child});
 
@@ -211,8 +191,6 @@ class PreviewWidget extends StatelessWidget {
   }
 }
 
-/// A custom [StatelessElement] with the sole purpose of simplifying identifying
-/// selections of @Preview annotations in the widget inspector.
 class PreviewWidgetElement extends StatelessElement {
   PreviewWidgetElement(super.widget);
 }
@@ -227,12 +205,9 @@ class WidgetPreviewGroupWidget extends StatelessWidget {
   final WidgetPreviewScaffoldController controller;
   final WidgetPreviewGroup group;
 
-  // Spacing values for the grid layout
   static const _gridSpacing = 8.0;
   static const _gridRunSpacing = 8.0;
 
-  /// The default radius of a Material 3 `Card`, as per documentation for `Card.shape`.
-  // TODO(bkonyi): inherit this from the theme.
   static const _kCardRadius = Radius.circular(12);
 
   Widget _buildGridViewFlex(List<WidgetPreview> previews) {
@@ -273,8 +248,6 @@ class WidgetPreviewGroupWidget extends StatelessWidget {
           ),
         ),
         child: Theme(
-          // Prevents divider lines appearing at the top and bottom of the
-          // expanded ExpansionTile.
           data: theme.copyWith(dividerColor: Colors.transparent),
           child: ExpansionTile(
             key: PageStorageKey(group.name),
@@ -318,8 +291,6 @@ class WidgetPreviewWidget extends StatefulWidget {
 class WidgetPreviewWidgetState extends State<WidgetPreviewWidget> {
   final transformationController = TransformationController();
 
-  // Set the initial preview brightness based on the platform default or the
-  // value explicitly specified for the preview.
   late final brightnessListenable = ValueNotifier<Brightness>(
     widget.preview.brightness ?? MediaQuery.platformBrightnessOf(context),
   );
@@ -327,7 +298,6 @@ class WidgetPreviewWidgetState extends State<WidgetPreviewWidget> {
   final softRestartListenable = ValueNotifier<bool>(false);
   final key = GlobalKey();
 
-  /// Returns the last size of the previewed widget.
   Size get lastChildSize =>
       (key.currentContext!.findRenderObject() as RenderBox).size;
 
@@ -340,18 +310,12 @@ class WidgetPreviewWidgetState extends State<WidgetPreviewWidget> {
     final currentBrightness = brightnessListenable.value;
     final systemBrightness = MediaQuery.platformBrightnessOf(context);
 
-    // No initial brightness was previously defined.
     if (previousBrightness == null && newBrightness != null) {
       if (currentBrightness == systemBrightness) {
-        // If the current brightness is different than the system brightness, the user has manually
-        // changed the brightness through the UI, so don't change it automatically.
         brightnessListenable.value = newBrightness;
       }
     }
-    // Changing the initial brightness to either a new initial brightness or system brightness.
     else if (previousBrightness != null) {
-      // If the current brightness is different than the initial brightness, the user has manually
-      // changed the brightness through the UI, so don't change it automatically.
       if (currentBrightness == previousBrightness) {
         brightnessListenable.value = newBrightness ?? systemBrightness;
       }
@@ -370,12 +334,6 @@ class WidgetPreviewWidgetState extends State<WidgetPreviewWidget> {
 
     bool errorThrownDuringTreeConstruction = false;
 
-    // Wrap the previewed widget with a ValueListenableBuilder responsible for performing a "soft"
-    // restart.
-    //
-    // A soft restart simply removes the previewed widget from the widget tree for a frame before
-    // re-inserting it on the next frame. This has the effect of re-running local initializers in
-    // State objects, which normally requires a hot restart to accomplish in a normal application.
     Widget preview = ValueListenableBuilder<bool>(
       valueListenable: softRestartListenable,
       builder: (context, performRestart, _) {
@@ -394,15 +352,12 @@ class WidgetPreviewWidgetState extends State<WidgetPreviewWidget> {
           );
           if (performRestart) {
             WidgetsBinding.instance.addPostFrameCallback((_) {
-              // Trigger a rebuild on the next frame to re-insert previewWidget.
               softRestartListenable.value = false;
             }, debugLabel: 'Soft Restart');
             return SizedBox.fromSize(size: lastChildSize);
           }
           return previewWidget;
         } on Object catch (error, stackTrace) {
-          // Catch any unhandled exceptions and display an error widget instead of taking
-          // down the entire preview environment.
           errorThrownDuringTreeConstruction = true;
           return WidgetPreviewErrorWidget(
             controller: widget.controller,
@@ -416,24 +371,16 @@ class WidgetPreviewWidgetState extends State<WidgetPreviewWidget> {
 
     final Size? size = widget.preview.size;
 
-    // Add support for selecting only previewed widgets via the widget
-    // inspector.
     preview = ValueListenableBuilder(
       valueListenable:
           WidgetsBinding.instance.debugShowWidgetInspectorOverrideNotifier,
       builder: (context, enableWidgetInspector, child) {
-        // Don't allow inspecting the error widget.
         if (child is WidgetPreviewErrorWidget) {
           return child;
         }
         if (enableWidgetInspector) {
           return WidgetInspector(
-            // TODO(bkonyi): wire up inspector controls for individual previews or
-            // the entire preview environment. This currently requires users to
-            // to enable widget selection via the Widget Inspector tool in DevTools.
 
-            // These buttons would be rendered on top of the previewed widget, so
-            // don't display them.
             exitWidgetSelectionButtonBuilder: null,
             moveExitWidgetSelectionButtonBuilder: null,
             tapBehaviorButtonBuilder: null,
@@ -463,16 +410,6 @@ class WidgetPreviewWidgetState extends State<WidgetPreviewWidget> {
       child: preview,
     );
 
-    // Override the asset resolution behavior to automatically insert
-    // 'packages/$packageName/` in front of non-package paths as some previews
-    // may reference assets that are within the current project and wouldn't
-    // normally require a package specifier.
-    // TODO(bkonyi): this doesn't modify the behavior of asset loading logic in
-    // the engine implementation. This means that any asset loading done by
-    // APIs provided in dart:ui won't work correctly for non-package asset
-    // paths (e.g., shaders loaded by `FragmentProgram.fromAsset()`).
-    //
-    // See https://github.com/flutter/flutter/issues/171284
     preview = DefaultAssetBundle(
       bundle: PreviewAssetBundle(packageName: widget.preview.packageName),
       child: preview,
@@ -494,7 +431,6 @@ class WidgetPreviewWidgetState extends State<WidgetPreviewWidget> {
           ),
         Container(
           padding: const EdgeInsets.symmetric(
-            // TODO(bkonyi): use theming or define global constants.
             horizontal: 16.0,
           ).add(hasName ? const EdgeInsets.only(top: 8.0) : EdgeInsets.zero),
           decoration: hasName
@@ -555,15 +491,11 @@ class _WidgetPreviewControlRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Don't show controls if an error occurred.
     if (errorThrownDuringTreeConstruction) {
       return Container();
     }
     return Row(
       mainAxisSize: MainAxisSize.min,
-      // If an unhandled exception was caught and we're displaying an error
-      // widget, these controls should be disabled.
-      // TODO(bkonyi): improve layout of controls.
       children: [
         ZoomControls(transformationController: transformationController),
         const SizedBox(width: 30),
@@ -575,7 +507,6 @@ class _WidgetPreviewControlRow extends StatelessWidget {
   }
 }
 
-/// Applies theming defined in [theme] to [child].
 class WidgetPreviewTheming extends StatelessWidget {
   const WidgetPreviewTheming({
     super.key,
@@ -585,7 +516,6 @@ class WidgetPreviewTheming extends StatelessWidget {
 
   final Widget child;
 
-  /// The set of themes to be applied to [child].
   final PreviewThemeData? theme;
 
   @override
@@ -598,8 +528,6 @@ class WidgetPreviewTheming extends StatelessWidget {
   }
 }
 
-/// Wraps the previewed [child] with the correct [MediaQueryData] overrides
-/// based on [preview] and the current device [Brightness].
 class WidgetPreviewMediaQueryOverride extends StatelessWidget {
   const WidgetPreviewMediaQueryOverride({
     super.key,
@@ -608,10 +536,8 @@ class WidgetPreviewMediaQueryOverride extends StatelessWidget {
     required this.child,
   });
 
-  /// The preview specification used to render the preview.
   final WidgetPreview preview;
 
-  /// The currently set brightness for this preview instance.
   final ValueListenable<Brightness> brightnessListenable;
 
   final Widget child;
@@ -626,8 +552,6 @@ class WidgetPreviewMediaQueryOverride extends StatelessWidget {
             context: context,
             brightness: brightness,
           ),
-          // Use mediaQueryPreview instead of preview to avoid capturing preview
-          // and creating an infinite loop.
           child: child,
         );
       },
@@ -661,8 +585,6 @@ class WidgetPreviewMediaQueryOverride extends StatelessWidget {
   }
 }
 
-/// Wraps [child] with a [Localizations] with localization data from
-/// [localizationsData].
 class WidgetPreviewLocalizations extends StatefulWidget {
   const WidgetPreviewLocalizations({
     super.key,
@@ -727,11 +649,6 @@ class _WidgetPreviewLocalizationsState
   }
 }
 
-/// An [InheritedWidget] that propagates the current size of the
-/// WidgetPreviewScaffold.
-///
-/// This is needed when determining how to put constraints on previewed widgets
-/// that would otherwise have infinite constraints.
 class WidgetPreviewerWindowConstraints extends InheritedWidget {
   const WidgetPreviewerWindowConstraints({
     super.key,
@@ -914,17 +831,12 @@ class _ScaledLayoutRenderObject extends RenderShiftedBox {
   }
 }
 
-// TODO(bkonyi): according to goderbauer@, this probably isn't the best approach to ensure we
-// handle unconstrained widgets. This should be reworked.
-/// Wrapper applying a custom render object to force constraints on
-/// unconstrained widgets.
 class _WidgetPreviewWrapper extends SingleChildRenderObjectWidget {
   const _WidgetPreviewWrapper({
     super.child,
     required this.previewerConstraints,
   });
 
-  /// The size of the previewer render surface.
   final BoxConstraints previewerConstraints;
 
   @override
@@ -944,7 +856,6 @@ class _WidgetPreviewWrapper extends SingleChildRenderObjectWidget {
   }
 }
 
-/// Custom render box that forces constraints onto unconstrained widgets.
 class _WidgetPreviewWrapperBox extends RenderShiftedBox {
   _WidgetPreviewWrapperBox({
     required RenderBox? child,
@@ -973,12 +884,6 @@ class _WidgetPreviewWrapperBox extends RenderShiftedBox {
       } on Object {
         minInstrinsicHeight = 0.0;
       }
-      // Determine if the previewed widget is vertically constrained. If the
-      // widget has a minimum intrinsic height of zero given the widget's max
-      // width, it has an unconstrained height and will cause an overflow in
-      // the previewer. In this case, apply finite constraints (e.g., the
-      // constraints for the root of the previewer). Otherwise, use the
-      // widget's actual constraints.
       _constraintOverride = minInstrinsicHeight == 0
           ? _previewerConstraints
           : const BoxConstraints();
@@ -999,38 +904,21 @@ class _WidgetPreviewWrapperBox extends RenderShiftedBox {
   }
 }
 
-/// Custom [AssetBundle] used to map original asset paths from the parent
-/// projects to those in the preview project.
 class PreviewAssetBundle extends PlatformAssetBundle {
   PreviewAssetBundle({required this.packageName});
 
-  /// The name of the package in which a preview was defined.
-  ///
-  /// For example, if a preview is defined in 'package:foo/src/bar.dart', this
-  /// will have the value 'foo'.
   final String packageName;
 
-  // Assets shipped via package dependencies have paths that start with
-  // 'packages'.
   static const String _kPackagesPrefix = 'packages';
 
-  // TODO(bkonyi): when loading an invalid asset path that doesn't start with
-  // 'packages', this throws a FlutterError referencing the modified key
-  // instead of the original. We should catch the error and rethrow one with
-  // the original key in the error message.
   @override
   Future<ByteData> load(String key) {
-    // These assets are always present or are shipped via a package and aren't
-    // actually located in the parent project, meaning their paths did not need
-    // to be modified.
     if (key == 'AssetManifest.bin' ||
         key == 'AssetManifest.bin.json' ||
         key == 'FontManifest.json' ||
         key.startsWith(_kPackagesPrefix)) {
       return super.load(key);
     }
-    // Other assets are from the parent project. Map their keys to package
-    // paths corresponding to the package containing the preview.
     return super.load(_toPackagePath(key));
   }
 
@@ -1048,30 +936,15 @@ class PreviewAssetBundle extends PlatformAssetBundle {
   String _toPackagePath(String key) => '$_kPackagesPrefix/$packageName/$key';
 }
 
-/// Main entrypoint for the widget previewer.
-///
-/// We don't actually define this as `main` to avoid copying this file into
-/// the preview scaffold project which prevents us from being able to use hot
-/// restart to iterate on this file.
 Future<void> mainImpl() async {
   final controller = WidgetPreviewScaffoldController(previews: previews);
   await controller.initialize();
-  // WARNING: do not move this line. This constructor sets
-  // [WidgetInspectorService.instance] to the custom service for the widget
-  // previewer. If [WidgetsFlutterBinding.ensureInitialized()] is invoked before
-  // the custom service is set, inspector service extensions will be registered
-  // against the wrong service.
   WidgetPreviewScaffoldInspectorService(dtdServices: controller.dtdServices);
   final WidgetsBinding binding = WidgetsFlutterBinding.ensureInitialized();
-  // Disable the injection of [WidgetInspector] into the widget tree built by
-  // [WidgetsApp]. [WidgetInspector] instances will be created for each
-  // individual preview so the widget inspector won't allow for users to select
-  // widgets that make up the widget preview scaffolding.
   binding.debugExcludeRootWidgetInspector = true;
   runWidget(
     DisableWidgetInspectorScope(
       child: binding.wrapWithDefaultView(
-        // Forces the set of previews to be recalculated after a hot reload.
         HotReloadListener(
           onHotReload: controller.onHotReload,
           child: WidgetPreviewScaffold(
@@ -1148,7 +1021,6 @@ class _WidgetPreviewScaffoldState extends State<WidgetPreviewScaffold> {
                 ],
               );
             },
-            // Display the previewer
             child: Column(
               children: [
                 Expanded(
@@ -1167,7 +1039,6 @@ class _WidgetPreviewScaffoldState extends State<WidgetPreviewScaffold> {
   }
 }
 
-/// The set of controls used to control the preview environment.
 class WidgetPreviewControls extends StatelessWidget {
   const WidgetPreviewControls({super.key, required this.controller});
 
@@ -1211,7 +1082,6 @@ class WidgetPreviewControls extends StatelessWidget {
   }
 }
 
-/// Renders the set of currently selected widget previews.
 class WidgetPreviews extends StatelessWidget {
   const WidgetPreviews({super.key, required this.controller});
 

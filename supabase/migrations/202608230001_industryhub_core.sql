@@ -1,6 +1,3 @@
--- IndustryHub core schema and starter datasets.
--- Run with: supabase db push
--- The migration is safe to run more than once.
 
 create extension if not exists pgcrypto;
 create or replace function public.set_updated_at()
@@ -168,7 +165,6 @@ create table if not exists public.workforce_skill_signals (
   created_at timestamptz not null default timezone('utc', now()),
   unique (dataset_id, variable, age_group, observed_on)
 );
--- Keep an existing compatible schema usable when this migration is added later.
 alter table public.profiles add column if not exists msic_code text;
 alter table public.profiles add column if not exists msic_description text;
 alter table public.profiles add column if not exists verified boolean not null default false;

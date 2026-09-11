@@ -65,7 +65,7 @@ void main() {
         'owner': 'Example SME',
         'owner_id': 'user-1',
       });
- 
+
       expect(listing.quantityLabel, '0.25');
     });
 
@@ -148,7 +148,7 @@ void main() {
         'source_name': 'Live catalogue',
         'source_url': 'https://example.com/course-1',
       });
- 
+
       expect(programme.skills, ['Data and analytics']);
       expect(programme.durationDays, 4);
       expect(programme.sourceUrl, 'https://example.com/course-1');

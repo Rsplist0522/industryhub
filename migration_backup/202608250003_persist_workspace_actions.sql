@@ -1,5 +1,3 @@
--- Persistent SkillMatch saves and FairPrice sessions for existing deployments.
--- Safe to run after the core migration.
 
 alter table public.profiles alter column business_name drop default;
 alter table public.profiles alter column sector drop default;

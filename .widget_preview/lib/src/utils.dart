@@ -1,6 +1,3 @@
-// Copyright 2014 The Flutter Authors. All rights reserved.
-// Use of this source code is governed by a BSD-style license that can be
-// found in the LICENSE file.
 
 import 'package:flutter/material.dart';
 import 'package:flutter/widget_previews.dart';
@@ -76,9 +73,7 @@ WidgetPreview buildWidgetPreviewError({
   );
 }
 
-/// A basic vertical spacer.
 class VerticalSpacer extends StatelessWidget {
-  /// Creates a basic vertical spacer.
   const VerticalSpacer({super.key});
 
   @override
@@ -87,9 +82,7 @@ class VerticalSpacer extends StatelessWidget {
   }
 }
 
-/// A basic horizontal spacer.
 class HorizontalSpacer extends StatelessWidget {
-  /// Creates a basic vertical spacer.
   const HorizontalSpacer({super.key});
 
   @override
@@ -98,9 +91,6 @@ class HorizontalSpacer extends StatelessWidget {
   }
 }
 
-/// A widget that explicitly responds to hot reload events.
-///
-/// Hot reload will always result in [reassemble] being called.
 class HotReloadListener extends StatefulWidget {
   const HotReloadListener({
     super.key,
@@ -128,12 +118,6 @@ class HotReloadListenerState extends State<HotReloadListener> {
   }
 }
 
-/// Wraps [child] in a border with default styling.
-///
-/// This border can optionally be made non-uniform by setting any of
-/// [showTop], [showBottom], [showLeft] or [showRight] to false.
-///
-/// Originally from DevTools.
 final class OutlineDecoration extends StatelessWidget {
   const OutlineDecoration({
     super.key,

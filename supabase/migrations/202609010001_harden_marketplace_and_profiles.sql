@@ -1,9 +1,4 @@
--- Harden IndustryHub account/profile and marketplace workflows.
--- Business-critical state transitions are performed in database functions so
--- they cannot be bypassed by calling Supabase directly from a modified client.
 
--- Preserve completed deal history while allowing listings to leave the public
--- marketplace without being physically deleted.
 alter table public.listings
   add column if not exists status text not null default 'ACTIVE';
 
@@ -49,8 +44,6 @@ create unique index if not exists deal_requests_one_pending_per_listing_requeste
 create index if not exists listings_status_created_at_idx
   on public.listings(status, created_at desc);
 
--- Create the profile as part of auth-user creation. This also works when email
--- confirmation means there is no authenticated session immediately at signup.
 create or replace function public.handle_new_user_profile()
 returns trigger
 language plpgsql
@@ -87,15 +80,12 @@ create trigger on_auth_user_created_industryhub_profile
 after insert on auth.users
 for each row execute function public.handle_new_user_profile();
 
--- Backfill a missing business name from signup metadata where possible.
 update public.profiles p
 set business_name = coalesce(nullif(btrim(u.raw_user_meta_data ->> 'business_name'), ''), p.business_name)
 from auth.users u
 where p.user_id = u.id
   and btrim(p.business_name) = '';
 
--- A client may edit normal business fields, but must not self-assign trust
--- badges or directly change a listing's marketplace lifecycle state.
 revoke insert, update on table public.profiles from authenticated;
 grant insert (user_id, business_name, sector, role, msic_code, msic_description)
   on table public.profiles to authenticated;
@@ -193,8 +183,6 @@ create trigger profiles_sync_business_identity_to_listings
 after update of business_name, verified on public.profiles
 for each row execute function public.sync_business_identity_to_listings();
 
--- Deal requests are read through RLS but created/transitioned only through the
--- validated functions below.
 revoke insert, update, delete on table public.deal_requests from authenticated;
 grant select on table public.deal_requests to authenticated;
 
@@ -341,9 +329,6 @@ begin
     raise exception 'Response note must be 240 characters or fewer.';
   end if;
 
-  -- Read the request first without locking it. Accept operations then lock the
-  -- listing before any request row, giving all concurrent acceptances the same
-  -- lock order and preventing two winners/deadlocks.
   select * into v_request
   from public.deal_requests
   where id = p_request_id
@@ -369,8 +354,6 @@ begin
       raise exception 'This listing is no longer available to accept.';
     end if;
 
-    -- Re-check the request after obtaining the listing lock. It may have been
-    -- cancelled while this response was waiting.
     select * into v_request
     from public.deal_requests
     where id = p_request_id

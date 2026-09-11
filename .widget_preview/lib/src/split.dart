@@ -1,9 +1,4 @@
-// Copyright 2014 The Flutter Authors. All rights reserved.
-// Use of this source code is governed by a BSD-style license that can be
-// found in the LICENSE file.
 
-// NOTE: most of the code in this file was pulled from the DevTools `Split`
-// implementation.
 
 import 'dart:math' as math;
 
@@ -12,26 +7,11 @@ import 'package:flutter/material.dart';
 
 import 'utils/pointer_events/pointer_events.dart';
 
-// Method to convert degrees to radians
 double degToRad(num deg) => deg * (math.pi / 180.0);
 
-/// A small double value, used to ensure that comparisons between double are
-/// valid.
 const defaultEpsilon = 1 / 1000;
 
-/// A widget that takes a list of children, lays them out along [axis], and
-/// allows the user to resize them.
-///
-/// The user can customize the amount of space allocated to each child by
-/// dragging a divider between them.
-///
-/// [initialFractions] defines how much space to give each child when building
-/// this widget.
-///
-/// [minSizes] defines the minimum size that each child can be set to when
-/// adjusting the sizes of the children.
 final class SplitPane extends StatefulWidget {
-  /// Builds a split oriented along [axis].
   SplitPane({
     super.key,
     required this.axis,
@@ -51,38 +31,16 @@ final class SplitPane extends StatefulWidget {
     }
   }
 
-  /// The main axis the children will lay out on.
-  ///
-  /// If [Axis.horizontal], the children will be placed in a [Row]
-  /// and they will be horizontally resizable.
-  ///
-  /// If [Axis.vertical], the children will be placed in a [Column]
-  /// and they will be vertically resizable.
-  ///
-  /// Cannot be null.
   final Axis axis;
 
-  /// The children that will be laid out along [axis].
   final List<Widget> children;
 
-  /// The fraction of the layout to allocate to each child in [children].
-  ///
-  /// The index of [initialFractions] corresponds to the child at index of
-  /// [children].
   final List<double> initialFractions;
 
-  /// The minimum size each child is allowed to be.
   final List<double>? minSizes;
 
-  /// Splitter widgets to divide [children].
-  ///
-  /// If this is null, a default splitter will be used to divide [children].
   final List<PreferredSizeWidget>? splitters;
 
-  /// The key passed to the divider between children[index] and
-  /// children[index + 1].
-  ///
-  /// Visible to grab it in tests.
   @visibleForTesting
   Key dividerKey(int index) => Key('$this dividerKey $index');
 
@@ -129,7 +87,6 @@ final class _SplitPaneState extends State<SplitPane> {
 
     final availableSize = axisSize - _totalSplitterSize();
 
-    // Size calculation helpers.
     double minSizeForIndex(int index) {
       if (widget.minSizes == null) return 0.0;
 
@@ -138,8 +95,6 @@ final class _SplitPaneState extends State<SplitPane> {
         totalMinSize += minSize;
       }
 
-      // Reduce the min sizes gracefully if the total required min size for all
-      // children is greater than the available size for children.
       return totalMinSize > availableSize
           ? widget.minSizes![index] * availableSize / totalMinSize
           : widget.minSizes![index];
@@ -172,30 +127,19 @@ final class _SplitPaneState extends State<SplitPane> {
       }
     }
     if (fractionDeltaRequired > 0) {
-      // Likely due to a change in the available size, the current fractions for
-      // the children do not obey the min size constraints.
-      // The min size constraints for children are scaled so it is always
-      // possible to meet them. A scaleFactor greater than 1 would indicate that
-      // it is impossible to meet the constraints.
       double scaleFactor = fractionDeltaRequired / fractionDeltaAvailable;
       assert(scaleFactor <= 1 + defaultEpsilon);
       scaleFactor = math.min(scaleFactor, 1.0);
       for (int i = 0; i < fractions.length; ++i) {
         final delta = deltaFromMinimumSize(i);
         if (delta < 0) {
-          // This is equivalent to adding delta but avoids rounding error.
           fractions[i] = minFractionForIndex(i);
         } else {
-          // Reduce all fractions that are above their minimum size by an amount
-          // proportional to their ability to reduce their size without
-          // violating their minimum size constraints.
           fractions[i] -= delta * scaleFactor;
         }
       }
     }
 
-    // Determine what fraction to give each child, including enough space to
-    // display the divider.
     final sizes = List.generate(fractions.length, (i) => sizeForIndex(i));
 
     void updateSpacing(DragUpdateDetails dragDetails, int splitterIndex) {
@@ -204,7 +148,6 @@ final class _SplitPaneState extends State<SplitPane> {
           : dragDetails.delta.dy;
       final fractionalDelta = dragDelta / axisSize;
 
-      // Returns the actual delta applied to elements before the splitter.
       double updateSpacingBeforeSplitterIndex(double delta) {
         final startingDelta = delta;
         var index = splitterIndex;
@@ -219,13 +162,9 @@ final class _SplitPaneState extends State<SplitPane> {
           clampFraction(index);
           index--;
         }
-        // At this point, we know that both [startingDelta] and [delta] are
-        // negative, and that [delta] represents the overflow that did not get
-        // applied.
         return startingDelta - delta;
       }
 
-      // Returns the actual delta applied to elements after the splitter.
       double updateSpacingAfterSplitterIndex(double delta) {
         final startingDelta = delta;
         var index = splitterIndex + 1;
@@ -240,16 +179,10 @@ final class _SplitPaneState extends State<SplitPane> {
           clampFraction(index);
           index++;
         }
-        // At this point, we know that both [startingDelta] and [delta] are
-        // negative, and that [delta] represents the overflow that did not get
-        // applied.
         return startingDelta - delta;
       }
 
       setState(() {
-        // Update the fraction of space consumed by the children. Always update
-        // the shrinking children first so that we do not over-increase the size
-        // of the growing children and cause layout overflow errors.
         if (fractionalDelta <= 0.0) {
           final appliedDelta = updateSpacingBeforeSplitterIndex(
             fractionalDelta,
@@ -294,9 +227,6 @@ final class _SplitPaneState extends State<SplitPane> {
                 _isDragging = false;
                 toggleIframePointerEvents(false);
               },
-              // DartStartBehavior.down is needed to keep the mouse pointer stuck to
-              // the drag bar. There still appears to be a few frame lag before the
-              // drag action triggers which is't ideal but isn't a launch blocker.
               dragStartBehavior: DragStartBehavior.down,
               child: widget.splitters != null
                   ? widget.splitters![i]

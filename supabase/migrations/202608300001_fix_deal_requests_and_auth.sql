@@ -1,5 +1,3 @@
--- Allow both sides of a deal request to see the request and update only the
--- status they are authorised to change.
 
 alter table public.deal_requests
   add column if not exists requester_name text not null default 'A ReSource business';

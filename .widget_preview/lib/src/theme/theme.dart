@@ -1,8 +1,4 @@
-// Copyright 2014 The Flutter Authors. All rights reserved.
-// Use of this source code is governed by a BSD-style license that can be
-// found in the LICENSE file.
 
-// NOTE: originally from package:devtools_app_shared
 
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -10,15 +6,9 @@ import 'package:widget_preview_scaffold/src/utils/color_utils.dart';
 
 import 'ide_theme.dart';
 
-// TODO(kenz): try to eliminate as many custom colors as possible, and pull
-// colors only from the [lightColorScheme] and the [darkColorScheme].
 
-/// Whether dark theme should be used as the default theme if none has been
-/// explicitly set.
 const useDarkThemeAsDefault = true;
 
-/// Constructs the light or dark theme for the app taking into account
-/// IDE-supplied theming.
 ThemeData themeFor({
   required bool isDarkTheme,
   required IdeTheme ideTheme,
@@ -52,8 +42,6 @@ ThemeData _baseTheme({
   required ThemeData theme,
   required Color backgroundColor,
 }) {
-  // TODO(kenz): do we need to pass in the foreground color from the [IdeTheme]
-  // as well as the background color?
   const kCardRadius = Radius.circular(12);
   return theme.copyWith(
     tabBarTheme: theme.tabBarTheme.copyWith(
@@ -160,9 +148,6 @@ TextTheme _devToolsTextTheme(ThemeData theme, TextTheme textTheme) {
   );
 }
 
-/// Light theme color scheme generated from DevTools Figma file.
-///
-/// Do not manually change these values.
 const lightColorScheme = ColorScheme(
   brightness: Brightness.light,
   primary: Color(0xFF195BB9),
@@ -195,9 +180,6 @@ const lightColorScheme = ColorScheme(
   scrim: Color(0xFF000000),
 );
 
-/// Dark theme color scheme generated from DevTools Figma file.
-///
-/// Do not manually change these values.
 const darkColorScheme = ColorScheme(
   brightness: Brightness.dark,
   primary: Color(0xFFADC6FF),
@@ -230,14 +212,6 @@ const darkColorScheme = ColorScheme(
   scrim: Color(0xFF000000),
 );
 
-/// Threshold used to determine whether a colour is light/dark enough for us to
-/// override the default DevTools themes with.
-///
-/// A value of 0.5 would result in all colours being considered light/dark, and
-/// a value of 0.12 allowing around only the 12% darkest/lightest colours by
-/// Flutter's luminance calculation.
-/// 12% was chosen because VS Code's default light background color is #f3f3f3
-/// which is a little under 11%.
 const _lightDarkLuminanceThreshold = 0.12;
 
 bool isValidDarkColor(Color? color) {
@@ -254,13 +228,11 @@ bool isValidLightColor(Color? color) {
   return color.computeLuminance() >= 1 - _lightDarkLuminanceThreshold;
 }
 
-// Size constants:
 const defaultButtonHeight = 26.0;
 const buttonMinWidth = 26.0;
 
 const defaultIconSize = 14.0;
 
-// Padding / spacing constants:
 const extraLargeSpacing = 32.0;
 const largeSpacing = 16.0;
 const defaultSpacing = 12.0;
@@ -273,14 +245,12 @@ const denseRowSpacing = 6.0;
 
 const densePadding = 4.0;
 
-// Other UI related constants:
 final defaultBorderRadius = BorderRadius.circular(_defaultBorderRadiusValue);
 const defaultRadius = Radius.circular(_defaultBorderRadiusValue);
 const _defaultBorderRadiusValue = 16.0;
 
 const defaultElevation = 4.0;
 
-// Font size constants:
 const largeFontSize = 14.0;
 const defaultFontSize = 12.0;
 const smallFontSize = 10.0;
@@ -298,9 +268,7 @@ extension DevToolsSharedColorScheme on ColorScheme {
   Color get tooltipTextColor => isLight ? Colors.white : Colors.black;
 }
 
-/// Utility extension methods to the [ThemeData] class.
 extension ThemeDataExtension on ThemeData {
-  /// Returns whether we are currently using a dark theme.
   bool get isDarkTheme => brightness == Brightness.dark;
 
   TextStyle get regularTextStyle => fixBlurryText(
@@ -327,8 +295,6 @@ extension ThemeDataExtension on ThemeData {
   TextStyle get fixedFontStyle => fixBlurryText(
     regularTextStyle.copyWith(
       fontFamily: GoogleFonts.robotoMono().fontFamily,
-      // Slightly smaller for fixes font text since it will appear larger
-      // to begin with.
       fontSize: defaultFontSize - 1,
     ),
   );
@@ -356,8 +322,6 @@ extension ThemeDataExtension on ThemeData {
   );
 }
 
-/// Returns a [TextStyle] with [FontFeature.proportionalFigures] applied to
-/// fix blurry text.
 TextStyle fixBlurryText(TextStyle style) {
   return style.copyWith(
     fontFeatures: [const FontFeature.proportionalFigures()],

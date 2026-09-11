@@ -63,7 +63,6 @@ serve(async (request) => {
             ? String(errorValue.message)
             : providerMessage;
       } catch (_) {
-        // Keep the bounded plain-text response when the provider is not JSON.
       }
       console.error('AI provider rejected the request', {
         status: upstream.status,
